@@ -4,7 +4,14 @@ uses libraries from ffmpeg for demultiplexing/ decoding/ filtering / encoding an
 
 dependencies:
 
-ffmpeg
+libavcodec
+libavformat
+libavfilter
+libavdevice
+libavutil
+
+(install using e.g sudo apt install libavcodec-dev)
+
 cmake
 pkg-config
 
