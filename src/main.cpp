@@ -1,11 +1,11 @@
 #include<iostream>
-#include<fstream>
 
 
 bool load_frame(const char* filename, unsigned char** data);
-bool save_frame(const char *out_filename, unsigned char** data);
-
 //note pointer to pointer in function prototype because we are about to dynamically allocate an array of pointers to store the frame(s)
+bool save_frame (unsigned char** data);
+
+
 
 
 
@@ -18,6 +18,11 @@ int main()
         std::cout<<"Couldn't load audio frame \n";
         return 1;
     } 
+
+    if (!save_frame(&frame_data))
+    {
+        return 1;
+    }
 
 
     return 0;

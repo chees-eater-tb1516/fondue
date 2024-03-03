@@ -1,19 +1,17 @@
 #include<fstream>
 #include<iostream>
-bool save_frame(const char *out_filename, unsigned char** data)
+bool save_frame(unsigned char** data)
 {
-    std::ofstream outf{out_filename};
+    std::ofstream outf{ "test_frame.txt" };
+    
 
-    if (!outf)
-    {
-        std::cerr<< "couldn't open file for writing \n";
-        return false;
-    }
 
     auto ptr = *data;
     for (int x = 0; x < 2; ++x){
         outf << *ptr++ << '\n';
     }
+    /*outf << "this is line 1\n";
+    outf << "this is line 2\n"; */
 
     return true;
 
