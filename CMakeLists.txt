@@ -8,6 +8,7 @@ add_subdirectory(lib/FFmpeg)
 
 list(APPEND SOURCES
     src/main.cpp
+    src/load_frame.cpp
 )
 
 add_executable(fondue ${SOURCES})
