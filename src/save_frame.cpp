@@ -7,7 +7,7 @@ bool save_frame(unsigned char** data)
 
 
     auto ptr = *data;
-    for (int x = 0; x < 2; ++x){
+    for (int x = 0; x < 10; ++x){
         outf << *ptr++ << '\n';
     }
     /*outf << "this is line 1\n";

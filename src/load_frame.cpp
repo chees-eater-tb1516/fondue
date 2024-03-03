@@ -69,7 +69,7 @@ bool load_frame(const char* filename, unsigned char** data_out)
         response = avcodec_send_packet(av_codec_ctx, av_packet);
         if (response < 0)
         {
-            std::cerr << "Failed to decode packet \n";
+            std::cerr << "Failed to decode packet, codec didn't receive frame \n";
             return false;
         }
         response = avcodec_receive_frame(av_codec_ctx, av_frame);
@@ -80,7 +80,7 @@ bool load_frame(const char* filename, unsigned char** data_out)
 
         else if (response < 0)
         {
-            std::cerr << "Failed to decode packet \n";
+            std::cerr << "Failed to decode packet, codec didn't return frame \n";
             return false;
         }
 
@@ -89,6 +89,8 @@ bool load_frame(const char* filename, unsigned char** data_out)
 
 
     }
+
+// assign frame data to variable data and return
 
     unsigned char* data = new unsigned char [2 * 3];
     for (int x = 0; x < 10; ++x)
