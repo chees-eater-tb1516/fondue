@@ -9,18 +9,19 @@ int decode_packet(AVCodecContext* dec, const AVPacket* pkt, AVFrame* frame, int 
 
 int demux_decode(const char* src_filename, const char* audio_dst_filename)
 {
-    AVFormatContext *fmt_ctx {};
-    AVCodecContext *audio_dec_ctx {};
-    AVStream *audio_stream {};
-    FILE *audio_dst_file {};
+    AVFormatContext* fmt_ctx = NULL;
+    AVCodecContext* audio_dec_ctx = NULL;
+    AVStream* audio_stream = NULL;
+    FILE* audio_dst_file = NULL;
     int audio_stream_idx {-1};
-    AVFrame *frame {};
-    AVPacket *pkt {};
+    AVFrame* frame = NULL;
+    AVPacket* pkt = NULL;
     int audio_frame_count = 0;
     int ret = 0;
     int x;
 
-    /* open input file and allocate format context*/
+    /* open input file and allocate format context, since fmt_ctx is a pointer to NULL, format context 
+    is allocated automatically*/
 
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0)
     {
