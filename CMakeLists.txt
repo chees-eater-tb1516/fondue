@@ -11,6 +11,10 @@ list(APPEND SOURCES
     src/main.cpp
     src/load_frame.cpp
     src/save_frame.cpp
+    src/demux_decode.cpp
+    src/open_codec_context.cpp
+    src/decode_packet.cpp
+    src/output_audio_frame.cpp
 )
 
 add_executable(fondue ${SOURCES})
