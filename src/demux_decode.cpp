@@ -10,7 +10,7 @@ int decode_packet(AVCodecContext* dec, const AVPacket* pkt, AVFrame* frame, int 
 int demux_decode(const char* src_filename, const char* audio_dst_filename)
 {
     AVFormatContext* fmt_ctx = NULL;
-    AVCodecContext* audio_dec_ctx = NULL;
+    AVCodecContext* audio_dec_ctx;
     AVStream* audio_stream = NULL;
     FILE* audio_dst_file = NULL;
     int audio_stream_idx {-1};
@@ -65,6 +65,13 @@ int demux_decode(const char* src_filename, const char* audio_dst_filename)
         goto end;
     }
 
+    pkt = av_packet_alloc();
+    if (!pkt) {
+        fprintf(stderr, "Could not allocate packet\n");
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
+
     if (audio_stream)
         printf("Demuxing audio from file '%s' into '%s'\n", src_filename, audio_dst_filename);
 
@@ -86,7 +93,16 @@ int demux_decode(const char* src_filename, const char* audio_dst_filename)
     x=1;
 
     end:
+    
+    avcodec_free_context(&audio_dec_ctx);
+    avformat_close_input(&fmt_ctx);
+    fclose(audio_dst_file);
+    av_packet_free(&pkt);   
+    av_frame_free(&frame);
+    
+ 
+    return ret < 0;
 
-    return 1;
+    
 
 }

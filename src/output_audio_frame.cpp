@@ -12,7 +12,8 @@ extern "C"{
 
 int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_file)
 {
-    size_t unpadded_linesize = 3; /*frame->nb_samples * av_get_bytes_per_sample(frame->format);*/
+    
+    size_t unpadded_linesize = frame->nb_samples *3; /*frame->nb_samples * av_get_bytes_per_sample(av_get_sample_fmt(frame));*/
     /*printf("audio_frame n:%d nb_samples:%d pts:%s\n",
            audio_frame_count++, frame->nb_samples,
            av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));*/
