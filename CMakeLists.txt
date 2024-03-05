@@ -15,6 +15,8 @@ list(APPEND SOURCES
     src/open_codec_context.cpp
     src/decode_packet.cpp
     src/output_audio_frame.cpp
+    src/get_format_from_sample_fmt.cpp
+    src/encode_example.cpp
 )
 
 add_executable(fondue ${SOURCES})

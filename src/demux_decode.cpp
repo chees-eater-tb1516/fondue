@@ -6,11 +6,12 @@ extern "C"{
 
 int open_codec_context(int* audio_stream_idx, AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx, enum AVMediaType type, const char* src_filename);
 int decode_packet(AVCodecContext* dec, const AVPacket* pkt, AVFrame* frame, int audio_frame_count, FILE* audio_dst_file);
+int get_format_from_sample_fmt(const char **fmt, enum AVSampleFormat sample_fmt);
 
 int demux_decode(const char* src_filename, const char* audio_dst_filename)
 {
     AVFormatContext* fmt_ctx = NULL;
-    AVCodecContext* audio_dec_ctx;
+    AVCodecContext* audio_dec_ctx = NULL;
     AVStream* audio_stream = NULL;
     FILE* audio_dst_file = NULL;
     int audio_stream_idx {-1};
@@ -20,8 +21,8 @@ int demux_decode(const char* src_filename, const char* audio_dst_filename)
     int ret = 0;
     int x;
 
-    /* open input file and allocate format context, since fmt_ctx is a pointer to NULL, format context 
-    is allocated automatically*/
+    /* open input file and allocate format context [since fmt_ctx is a pointer to NULL, format context 
+    is allocated automatically]*/
 
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0)
     {
@@ -87,6 +88,34 @@ int demux_decode(const char* src_filename, const char* audio_dst_filename)
         if (ret < 0)
             break;
     }
+
+    /*flush the decoder*/
+    decode_packet(audio_dec_ctx, NULL, frame, audio_frame_count, audio_dst_file);
+    printf("demuxing suceeded\n");
+
+        if (audio_stream) {
+        enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
+        int n_channels = audio_dec_ctx->channels;
+        const char *fmt;
+ 
+        if (av_sample_fmt_is_planar(sfmt)) {
+            const char *packed = av_get_sample_fmt_name(sfmt);
+            printf("Warning: the sample format the decoder produced is planar "
+                   "(%s). This example will output the first channel only.\n",
+                   packed ? packed : "?");
+            sfmt = av_get_packed_sample_fmt(sfmt);
+            n_channels = 1;
+        }
+ 
+        if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
+            goto end;
+ 
+        printf("Play the output audio file with the command:\n"
+               "ffplay -f %s -ac %d -ar %d %s\n",
+               fmt, n_channels, audio_dec_ctx->sample_rate,
+               audio_dst_filename);
+    }
+
 
 
 

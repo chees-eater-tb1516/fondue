@@ -1,0 +1,14 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=/usr/lib/x86_64-linux-gnu
+includedir=/usr/include/x86_64-linux-gnu
+
+Name: libavdevice
+Description: FFmpeg device handling library
+Version: 58.13.100
+Requires: 
+Requires.private: libavfilter >= 7.110.100, libswscale >= 5.9.100, libpostproc >= 55.9.100, libavformat >= 58.76.100, libavcodec >= 58.134.100, libswresample >= 3.9.100, libavutil >= 56.70.100
+Conflicts:
+Libs: -L${libdir}  -lavdevice 
+Libs.private: -lm -lraw1394 -lavc1394 -lrom1394 -liec61883 -ljack -ldrm -lopenal -lxcb -lxcb-shm -lxcb-shape -lxcb-xfixes -lcdio_paranoia -lcdio_cdda -lcdio -lm -ldc1394 -lasound -lcaca -lGL -lpulse -pthread -lSDL2 -lsndio -lXv -lX11 -lXext
+Cflags: -I${includedir}
