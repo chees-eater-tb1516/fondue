@@ -4,21 +4,20 @@ extern "C"{
 #include <libavutil/imgutils.h>
 #include <libavutil/samplefmt.h>
 #include <libavutil/timestamp.h>
-
 }
+#include <inttypes.h>
 
 
 
-
-int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_file)
+int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_file, AVCodecContext* audio_dec_ctx)
 {
-    
-    size_t unpadded_linesize = frame->nb_samples *3; /*frame->nb_samples * av_get_bytes_per_sample(av_get_sample_fmt(frame));*/
+    enum AVSampleFormat sample_fmt = static_cast<AVSampleFormat>(frame->format); 
+    size_t unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample(sample_fmt);
     /*printf("audio_frame n:%d nb_samples:%d pts:%s\n",
            audio_frame_count++, frame->nb_samples,
-           av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));*/
-    printf("audio_frame n:%d nb_samples:%d",
-           audio_frame_count++, frame->nb_samples);       
+           av_ts2timestr(frame->pts, audio_dec_ctx->time_base));*/
+    /*printf("audio_frame n:%d nb_samples:%d",
+           audio_frame_count++, frame->nb_samples);*/       
     
     /* Write the raw audio data samples of the first plane. This works
      * fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,
@@ -28,6 +27,7 @@ int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_fi
      * in these cases.
      * You should use libswresample or libavfilter to convert the frame
      * to packed data. */
+    audio_frame_count++;
     fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
  
     return 0;

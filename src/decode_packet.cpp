@@ -3,7 +3,7 @@ extern "C"{
 #include <libavformat/avformat.h>
 }
 
-int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_file);
+int output_audio_frame(AVFrame *frame, int audio_frame_count, FILE* audio_dst_file, AVCodecContext* audio_dec_ctx);
 
 int decode_packet(AVCodecContext* dec, const AVPacket* pkt, AVFrame* frame, int audio_frame_count, FILE* audio_dst_file)
 {
@@ -31,7 +31,7 @@ int decode_packet(AVCodecContext* dec, const AVPacket* pkt, AVFrame* frame, int 
  
         // write the frame data to output file
         
-        ret = output_audio_frame(frame, audio_frame_count, audio_dst_file);
+        ret = output_audio_frame(frame, audio_frame_count, audio_dst_file, dec);
  
         av_frame_unref(frame);
         if (ret < 0)
