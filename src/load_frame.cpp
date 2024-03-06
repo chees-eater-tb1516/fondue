@@ -22,7 +22,7 @@ bool load_frame(const char* filename, unsigned char** data_out)
 // in this case the file only contains one stream - the audio stream
     
     AVCodecParameters* av_codec_params;
-    AVCodec* av_codec;
+    const AVCodec* av_codec;
     av_codec_params = av_format_ctx->streams[0]->codecpar;
     av_codec = avcodec_find_decoder(av_codec_params->codec_id);
 

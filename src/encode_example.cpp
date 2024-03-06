@@ -1,11 +1,9 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
-
-#include <libavutil/channel_layout.h>
-#include <libavutil/common.h>
-#include <libavutil/frame.h>
-#include <libavutil/samplefmt.h> 
+#include<libavformat/avformat.h>
+#include <libavutil/avutil.h>
+#include<libavutil/channel_layout.h>
 }
 
 #include <stdint.h>
@@ -49,9 +47,14 @@ static int select_channel_layout(const AVCodec* codec, AVChannelLayout* dst)
 {
     const AVChannelLayout *p, *best_ch_layout;
     int best_nb_channels   = 0;
+
+   
+
+    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
+    
  
     if (!codec->ch_layouts)
-        return av_channel_layout_copy(dst, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO);
+        return av_channel_layout_copy(dst, &default_channel_layout);
  
     p = codec->ch_layouts;
     while (p->nb_channels) {
@@ -142,5 +145,6 @@ int encode_example(const char* output_filename)
 
 
     i=1;
+    return 1;
 
 }
