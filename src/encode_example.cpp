@@ -1,9 +1,9 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
-#include<libavformat/avformat.h>
+#include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
-#include<libavutil/channel_layout.h>
+#include <libavutil/channel_layout.h>
 }
 
 #include <stdint.h>
@@ -143,8 +143,80 @@ int encode_example(const char* output_filename)
     if (ret < 0)
         exit(1);
 
+    /* open it */
+    if (avcodec_open2(codec_ctx, codec, NULL) < 0) {
+        fprintf(stderr, "Could not open codec\n");
+        exit(1);
+    }
 
-    i=1;
-    return 1;
+    output_file = fopen(output_filename, "wb");
+    if (!output_file) {
+        fprintf(stderr, "Could not open %s\n", output_filename);
+        exit(1);
+    }
+
+        /* packet for holding encoded output */
+    pkt = av_packet_alloc();
+    if (!pkt) {
+        fprintf(stderr, "could not allocate the packet\n");
+        exit(1);
+    }
+
+        /* frame containing input raw audio */
+    frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Could not allocate audio frame\n");
+        exit(1);
+    }
+
+    frame->nb_samples     = codec_ctx->frame_size;
+    frame->format         = codec_ctx->sample_fmt;
+    ret = av_channel_layout_copy(&frame->ch_layout, &codec_ctx->ch_layout);
+    if (ret < 0)
+        exit(1);
+    
+        /* allocate the data buffers */
+    ret = av_frame_get_buffer(frame, 0);
+    if (ret < 0) {
+        fprintf(stderr, "Could not allocate audio data buffers\n");
+        exit(1);
+    }
+
+        /* encode a single tone sound */
+    t = 0;
+    tincr = 2 * M_PI * 440.0 / codec_ctx->sample_rate;
+    for (i=0; i<200; i++)
+    {
+        /* make sure the frame is writable -- makes a copy if the encoder
+         * kept a reference internally */
+        ret = av_frame_make_writable(frame);
+        if (ret < 0)
+            exit(1);
+        samples = (uint16_t*)frame->data[0];
+        for (j = 0; j < codec_ctx->frame_size; j++) 
+        {
+            samples[2*j] = (int)(sin(t) * 10000);
+ 
+            for (k = 1; k < codec_ctx->ch_layout.nb_channels; k++)
+                samples[2*j + k] = samples[2*j];
+            t += tincr;
+        } 
+        encode(codec_ctx, frame, pkt, output_file);   
+
+    }
+
+        /* flush the encoder */
+    encode(codec_ctx, NULL, pkt, output_file);
+ 
+    fclose(output_file);
+ 
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    avcodec_free_context(&codec_ctx);
+ 
+    return 0;
+    
+   
+
 
 }

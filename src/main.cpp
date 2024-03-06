@@ -31,7 +31,7 @@ int main()
         return 1;
     }*/
 
-    encode_example("out_file");
+    encode_example("out_file.mp2");
     
 
 

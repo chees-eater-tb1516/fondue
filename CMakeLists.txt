@@ -15,6 +15,7 @@ list(APPEND SOURCES
     src/output_audio_frame.cpp
     src/get_format_from_sample_fmt.cpp
     src/encode_example.cpp
+    src/mux_example.cpp
 )
 
 add_executable(fondue ${SOURCES})
