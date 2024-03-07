@@ -33,7 +33,7 @@ int main()
     }*/
 
     //encode_example("out_file.mp2");
-    mux_example("output1");
+    mux_example("noise.mp3");
     
 
 

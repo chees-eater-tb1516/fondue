@@ -11,15 +11,17 @@ extern "C"
 #include<libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
+
 }
-#define STREAM_DURATION   10.0
+
+#define STREAM_DURATION   20.0
 
 // a wrapper around a single output AVStream
 typedef struct OutputStream {
     AVStream *st;
     AVCodecContext *enc;
  
-    /* pts of the next frame that will be generated */
+    /* pts of the next frame that will be generated: Presentation TimeStamp */
     int64_t next_pts;
     int samples_count;
  
@@ -35,11 +37,11 @@ typedef struct OutputStream {
 } OutputStream;
 
 /* Add an output stream. */
-static void add_stream(OutputStream *ost, AVFormatContext *oc,
-                       const AVCodec **codec,
+static void add_stream(OutputStream* ost, AVFormatContext* oc,
+                       const AVCodec** codec,
                        enum AVCodecID codec_id)
 {
-    AVCodecContext *c;
+    AVCodecContext* c;
     int i;
  
     /* find the encoder */
@@ -125,9 +127,11 @@ static void open_audio(AVFormatContext *oc, const AVCodec *codec,
  
     c = ost->enc;
  
-    /* open it */
+    /* copy the options into a temp dictionary*/
     av_dict_copy(&opt, opt_arg, 0);
+    /* open the codec with any required options*/
     ret = avcodec_open2(c, codec, &opt);
+    /* delete the temp dictionary*/
     av_dict_free(&opt);
     if (ret < 0) {
         fprintf(stderr, "Could not open audio codec\n");
@@ -141,10 +145,12 @@ static void open_audio(AVFormatContext *oc, const AVCodec *codec,
     ost->tincr2 = 2 * M_PI * 110.0 / c->sample_rate / c->sample_rate;
  
     if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+    /*can anyone explain to me what the bitwise AND operator is doing here?*/
         nb_samples = 10000;
     else
         nb_samples = c->frame_size;
  
+    /* put an empty frame and an empty tmp_frame into the output_stream struct*/
     ost->frame     = alloc_audio_frame(c->sample_fmt, &c->ch_layout,
                                        c->sample_rate, nb_samples);
     ost->tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, &c->ch_layout,
@@ -164,7 +170,8 @@ static void open_audio(AVFormatContext *oc, const AVCodec *codec,
         exit(1);
     }
  
-    /* set options */
+    /* set options presumably these can be changed to suit our purposes.
+    this is where the input format can be conformed to the output format*/
     av_opt_set_chlayout  (ost->swr_ctx, "in_chlayout",       &c->ch_layout,      0);
     av_opt_set_int       (ost->swr_ctx, "in_sample_rate",     c->sample_rate,    0);
     av_opt_set_sample_fmt(ost->swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16, 0);
@@ -187,17 +194,45 @@ static AVFrame *get_audio_frame(OutputStream *ost)
     int j, i, v;
     int16_t *q = (int16_t*)frame->data[0];
  
-    /* check if we want to generate more frames */
+    /* check if we want to generate more frames ,return NULL pointer if we've run out time*/
     if (av_compare_ts(ost->next_pts, ost->enc->time_base,
                       STREAM_DURATION, (AVRational){ 1, 1 }) > 0)
         return NULL;
  
+    /*generates a sine wave sweep that starts at 0 hz and increases at 110 Hz/ sec*/
     for (j = 0; j <frame->nb_samples; j++) {
         v = (int)(sin(ost->t) * 10000);
         for (i = 0; i < ost->enc->ch_layout.nb_channels; i++)
             *q++ = v;
         ost->t     += ost->tincr;
         ost->tincr += ost->tincr2;
+    }
+ 
+    frame->pts = ost->next_pts;
+    ost->next_pts  += frame->nb_samples;
+ 
+    return frame;
+}
+
+static AVFrame *get_audio_frame_white_noise(OutputStream *ost)
+{
+    AVFrame *frame = ost->tmp_frame;
+    int j, i, fullscale;
+    float v;
+    int16_t *q = (int16_t*)frame->data[0];
+ 
+    /* check if we want to generate more frames ,return NULL pointer if we've run out time*/
+    if (av_compare_ts(ost->next_pts, ost->enc->time_base,
+                      STREAM_DURATION, (AVRational){ 1, 1 }) > 0)
+        return NULL;
+ 
+    /*generates white noise; fullscale = 2000 gives quiet noise*/
+    for (j = 0; j <frame->nb_samples; j++) {
+        fullscale=2000;
+        v = static_cast<float>(std::rand())/RAND_MAX -0.5;
+        for (i = 0; i < ost->enc->ch_layout.nb_channels; i++)
+            *q++ = v*fullscale;
+        
     }
  
     frame->pts = ost->next_pts;
@@ -261,7 +296,7 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
  
     c = ost->enc;
  
-    frame = get_audio_frame(ost);
+    frame = get_audio_frame_white_noise(ost);
  
     if (frame) {
         /* convert samples from native format to destination codec format, using the resampler */
@@ -314,44 +349,47 @@ static void close_stream(AVFormatContext *oc, OutputStream *ost)
 int mux_example(const char* filename)
 {
     OutputStream audio_stream = {0};
-    const AVOutputFormat* fmt;
+    const AVOutputFormat* output_fmt;
     AVFormatContext* output_ctx;
     const AVCodec* audio_codec;
     int ret;
-    int encode_audio = 0;
+    int encode_audio = 1;
     AVDictionary* options = NULL;
 
 
     /*NOT IMPLEMENTED YET some code required here to pass options into the AVDictionary*/
 
-        /* allocate the output media context */
+        /* allocate the output media context , guesses format based on filename*/
     avformat_alloc_output_context2(&output_ctx, NULL, NULL, filename);
     if (!output_ctx) 
     {
+        /* defaults to mpeg*/
         printf("Could not deduce output format from file extension: using MPEG.\n");
         avformat_alloc_output_context2(&output_ctx, NULL, "mpeg", filename);
     }
     if (!output_ctx)
         return 1;
  
-    fmt = output_ctx->oformat;
+    /*assign things to the output format from the output format context*/
+    output_fmt = output_ctx->oformat;
 
 
-        /* Add the audiostream using the default format codecs 
+    /* Add the audiostream using the default format codecs 
         and initialize the codecs. */
 
-    if (fmt->audio_codec != AV_CODEC_ID_NONE) {
-        add_stream(&audio_stream, output_ctx, &audio_codec, fmt->audio_codec);    
+    if (output_fmt->audio_codec != AV_CODEC_ID_NONE) {
+        add_stream(&audio_stream, output_ctx, &audio_codec, output_fmt->audio_codec);    
     }
 
         /* Now that all the parameters are set, we can open the audio 
-        codecs and allocate the necessary encode buffers. */
+        codecs and allocate the necessary encode buffers. Also open the thing that deals with resampling
+        the input to suit the output*/
     open_audio(output_ctx, audio_codec, &audio_stream, options);
 
     av_dump_format(output_ctx, 0, filename, 1);
 
         /* open the output file, if needed */
-    if (!(fmt->flags & AVFMT_NOFILE)) {
+    if (!(output_fmt->flags & AVFMT_NOFILE)) {
         ret = avio_open(&output_ctx->pb, filename, AVIO_FLAG_WRITE);
         if (ret < 0) {
             fprintf(stderr, "Could not open '%s'\n", filename);
@@ -379,7 +417,7 @@ int mux_example(const char* filename)
     close_stream(output_ctx, &audio_stream);
 
 
-    if (!(fmt->flags & AVFMT_NOFILE))
+    if (!(output_fmt->flags & AVFMT_NOFILE))
         /* Close the output file. */
         avio_closep(&output_ctx->pb);
  
