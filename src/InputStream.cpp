@@ -101,7 +101,7 @@ int InputStream::decode_one_frame(AVFrame* common_frame)
             return ret;
         }
     common_frame=m_tmp_frame;
-    //std::cout<< *m_tmp_frame->data[0] << "\n";
+    
     av_frame_unref(m_tmp_frame);
     
     
