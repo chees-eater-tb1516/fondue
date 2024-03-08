@@ -17,7 +17,7 @@ list(APPEND SOURCES
     #src/encode_example.cpp
     #src/mux_example.cpp
     src/InputStream.cpp
-    src/InputStream.h
+    src/Fonduempeg.h
 )
 
 add_executable(fondue ${SOURCES})
