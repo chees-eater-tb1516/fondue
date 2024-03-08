@@ -5,20 +5,14 @@ extern "C"{
 
 
 
-int open_codec_context(int* audio_stream_idx, AVCodecContext** dec_ctx, AVFormatContext* fmt_ctx, enum AVMediaType type, const char* src_filename)
+int open_codec_context(AVCodecContext** dec_ctx, AVFormatContext* fmt_ctx, enum AVMediaType type, const char* src_filename)
 {
-    int ret, stream_index;
+    int ret;
     AVStream *st{};
     const AVCodec* dec{};
  
-    ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);
-    if (ret < 0) {
-        fprintf(stderr, "Could not find %s stream in input file '%s'\n",
-                av_get_media_type_string(type), src_filename);
-        return ret;
-    } else {
-        stream_index = ret;
-        st = fmt_ctx->streams[stream_index];
+    
+        st = fmt_ctx->streams[0];
  
         /* find decoder for the stream */
         dec = avcodec_find_decoder(st->codecpar->codec_id);
@@ -36,7 +30,7 @@ int open_codec_context(int* audio_stream_idx, AVCodecContext** dec_ctx, AVFormat
             return AVERROR(ENOMEM);
         }
  
-        /* Copy codec parameters from input stream to output codec context */
+        /* Copy codec parameters from input stream to codec context */
         if ((ret = avcodec_parameters_to_context(*dec_ctx, st->codecpar)) < 0) {
             fprintf(stderr, "Failed to copy %s codec parameters to decoder context\n",
                     av_get_media_type_string(type));
@@ -49,8 +43,8 @@ int open_codec_context(int* audio_stream_idx, AVCodecContext** dec_ctx, AVFormat
                     av_get_media_type_string(type));
             return ret;
         }
-        *audio_stream_idx = stream_index;
-    }
+       
+    
  
     return 0;
 

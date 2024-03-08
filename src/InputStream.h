@@ -1,18 +1,12 @@
-extern "C"{
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-} 
-#include<cstdlib>
-#include<string>
 
-int open_codec_context(AVCodecContext** dec_ctx, AVFormatContext* fmt_ctx, enum AVMediaType type, const char* src_filename);
+
 
 
 
 class InputStream 
 {
     private:
-        char* m_source_url = NULL;
+        const char* m_source_url = NULL;
         AVFormatContext* m_format_ctx = NULL;
         AVCodecContext* m_input_codec_ctx = NULL;
         /*needs reference to the output codec context in order to be 
@@ -28,7 +22,7 @@ class InputStream
 
     public:
         /*normal constructor*/
-        InputStream(char* source_url, AVCodecContext* output_codec_ctx, AVFrame* common_frame);
+        InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVFrame* common_frame);
         
         /*destructor*/
         ~InputStream();

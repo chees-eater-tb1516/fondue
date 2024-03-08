@@ -9,13 +9,13 @@ add_subdirectory(lib/FFmpeg)
 
 list(APPEND SOURCES
     src/main.cpp
-    src/demux_decode.cpp
+    #src/demux_decode.cpp
     src/open_codec_context.cpp
-    src/decode_packet.cpp
-    src/output_audio_frame.cpp
-    src/get_format_from_sample_fmt.cpp
-    src/encode_example.cpp
-    src/mux_example.cpp
+    #src/decode_packet.cpp
+    #src/output_audio_frame.cpp
+    #src/get_format_from_sample_fmt.cpp
+    #src/encode_example.cpp
+    #src/mux_example.cpp
     src/InputStream.cpp
     src/InputStream.h
 )
