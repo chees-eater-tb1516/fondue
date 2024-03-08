@@ -32,7 +32,7 @@ typedef struct OutputStream {
  
     float t, tincr, tincr2;
  
-    struct SwsContext *sws_ctx;
+    
     struct SwrContext *swr_ctx;
 } OutputStream;
 
@@ -339,7 +339,6 @@ static void close_stream(AVFormatContext *oc, OutputStream *ost)
     av_frame_free(&ost->frame);
     av_frame_free(&ost->tmp_frame);
     av_packet_free(&ost->tmp_pkt);
-    sws_freeContext(ost->sws_ctx);
     swr_free(&ost->swr_ctx);
 }
  

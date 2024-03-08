@@ -10,6 +10,7 @@ int get_format_from_sample_fmt(const char **fmt, enum AVSampleFormat sample_fmt)
 
 int demux_decode(const char* src_filename, const char* audio_dst_filename)
 {
+    
     AVFormatContext* fmt_ctx = NULL;
     AVCodecContext* audio_dec_ctx = NULL;
     AVStream* audio_stream = NULL;
