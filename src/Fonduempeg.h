@@ -14,7 +14,7 @@ extern "C"{
 #include<iostream>
 
 #define DEFAULT_BIT_RATE 192000
-#define DEFAULT_SAMPLE_RATE 44100
+#define DEFAULT_SAMPLE_RATE 48000
 #define DEFAULT_FRAME_SIZE 10000
 
 

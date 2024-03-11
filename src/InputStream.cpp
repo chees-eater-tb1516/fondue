@@ -188,10 +188,11 @@ bool InputStream::get_one_output_frame()
         if (decode_one_input_frame() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
 
-        for (i = 0; i < m_temp_frame->nb_samples; i++)
-            for (ch = 0; ch < m_input_codec_ctx->ch_layout.nb_channels; ch++)
-                //std::cout<<*(m_temp_frame->data[ch] + m_input_data_size*i) <<'\n';
-                m_raw_sample_queue.push_front(*(m_temp_frame->data[ch] + m_input_data_size*i));
+        /*push samples to queue buffer using pointer arithmetic*/
+        for (i = 0; i < m_frame->nb_samples; i++)
+            for (ch = 0; ch < m_output_codec_ctx->ch_layout.nb_channels; ch++)
+                m_raw_sample_queue.push_front(*(m_frame->data[ch] + m_input_data_size*i));
+                av_frame_unref(m_frame);
         
         number_buffered_samples = m_raw_sample_queue.size(); 
 
