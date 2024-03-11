@@ -4,11 +4,21 @@
 extern "C"{
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+#include <libavutil/error.h>
+#include <libavutil/avassert.h>
 } 
 #include<cstdlib>
+#include<deque>
+#include<iostream>
 
-int open_codec_context(AVCodecContext** dec_ctx, AVFormatContext* fmt_ctx, enum AVMediaType type, const char* src_filename);
-int decode_packet();
+#define DEFAULT_BIT_RATE 192000
+#define DEFAULT_SAMPLE_RATE 44100
+#define DEFAULT_FRAME_SIZE 10000
+
+
+char* av_error_to_string(int error_code);
 
 class InputStream 
 {
@@ -22,10 +32,17 @@ class InputStream
         AVStream* m_audio_stream =  NULL;
         int m_audio_stream_idx {0};
         AVFrame* m_frame = NULL;
-       
+        AVFrame* m_temp_frame = NULL;
+        AVFrame* m_out_frame = NULL;       
         AVPacket* m_pkt = NULL;
         bool m_got_frame = false;
         int m_ret{};
+        int m_input_data_size;
+        struct SwrContext* m_swr_ctx;
+        int m_dst_nb_samples;
+        int m_default_frame_size;
+        int m_output_frame_size;
+        std::deque<uint8_t> m_raw_sample_queue;
 
     public:
         /*normal constructor*/
@@ -37,11 +54,23 @@ class InputStream
 
         void cleanup();
 
-        bool decode_one_frame();
+        /*get one frame of raw audio from the input resource*/
+        int decode_one_input_frame();
+
+        /*convert the sample format, sample rate and channel layout of the input frame to 
+        those which the output encoder requires. NOTE the resulting frame will most likely 
+        not contain the correct number of samples for the output encoder*/
+        int resample_one_input_frame();
+
+        bool get_one_output_frame();
 
         void unref_frame();
 
         AVFrame* get_frame() const {return m_frame;}
+
+        int open_codec_context(enum AVMediaType type);
+
+        AVFrame* alloc_frame(AVCodecContext* codec_context);
     
 };
 
@@ -72,6 +101,8 @@ class OutputStream
         void cleanup ();
 
         void set_frame(AVFrame* frame){m_frame = frame;}
+
+        AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
 
         //bool encode_one_frame();
 

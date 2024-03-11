@@ -10,10 +10,9 @@ add_subdirectory(lib/FFmpeg)
 list(APPEND SOURCES
     src/main.cpp
     src/InputStream.cpp
-    src/open_codec_context.cpp
     src/OutputStream.cpp
     src/Fonduempeg.h
-    src/add_stream.cpp
+    src/misc_functions.cpp
 )
 
 add_executable(fondue ${SOURCES})

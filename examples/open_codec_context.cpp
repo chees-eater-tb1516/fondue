@@ -31,7 +31,7 @@ int open_codec_context(AVCodecContext** dec_ctx, AVFormatContext* fmt_ctx, enum 
         }
  
         /* Copy codec parameters from input stream to codec context */
-        if ((ret = avcodec_parameters_to_context(*dec_ctx, st->codecpar)) < 0) {
+        if ((ret = avcodec_parameters_to_context(dec_ctx, st->codecpar)) < 0) {
             fprintf(stderr, "Failed to copy %s codec parameters to decoder context\n",
                     av_get_media_type_string(type));
             return ret;

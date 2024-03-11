@@ -58,22 +58,22 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
         }
 
         m_audio_stream->id = m_output_format_context->nb_streams-1;
-        AVCodecContext* c;
-        c = avcodec_alloc_context3(m_output_codec);
-        if (!c) 
+     
+        m_output_codec_context = avcodec_alloc_context3(m_output_codec);
+        if (!m_output_codec_context) 
         {
             fprintf(stderr, "Could not alloc an encoding context\n");
             cleanup();
             exit(1);
         }
 
-        m_output_codec_context = c;
+   
         int i;
 
         m_output_codec_context->sample_fmt  = (m_output_codec)->sample_fmts ?
             (m_output_codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-        m_output_codec_context->bit_rate    = bit_rate;
-        m_output_codec_context->sample_rate = sample_rate;
+        m_output_codec_context->bit_rate    = DEFAULT_BIT_RATE;
+        m_output_codec_context->sample_rate = DEFAULT_SAMPLE_RATE;
         if ((m_output_codec)->supported_samplerates) 
         {
             m_output_codec_context->sample_rate = (m_output_codec)->supported_samplerates[0];
@@ -84,13 +84,13 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
             }
         }
         AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
-        av_channel_layout_copy(&c->ch_layout, &default_channel_layout);
-        m_audio_stream->time_base = (AVRational){ 1, c->sample_rate };
+        av_channel_layout_copy(&m_output_codec_context->ch_layout, &default_channel_layout);
+        m_audio_stream->time_base = (AVRational){ 1, m_output_codec_context->sample_rate };
  
         /* Some formats want stream headers to be separate. */
         if (m_output_format_context->oformat->flags & AVFMT_GLOBALHEADER)
         {
-            c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            m_output_codec_context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
            
 
@@ -116,11 +116,12 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
         exit(1);
     }
 
+    /*ensures a frame with > 0 samples is created even if the codec context has a frame size of zero (implies variable frame size?)*/
     if (m_output_codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-    /*can anyone explain to me what the bitwise AND operator is doing here?*/
-        nb_samples = 10000;
+        nb_samples = DEFAULT_FRAME_SIZE;
     else
         nb_samples = m_output_codec_context->frame_size;
+
 
     /* allocate an empty frame*/
     m_frame = av_frame_alloc();
@@ -131,11 +132,13 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
         exit(1);
     }
 
+    /*copy the frame parameters from the codec context / set them if they need setting*/
     m_frame->format = m_output_codec_context->sample_fmt;
     av_channel_layout_copy(&m_frame->ch_layout, &m_output_codec_context->ch_layout);
-    m_frame->sample_rate = sample_rate;
+    m_frame->sample_rate = DEFAULT_SAMPLE_RATE;
     m_frame->nb_samples = nb_samples;
 
+    /*allocate the audio buffers in the frame*/
     if (nb_samples) {
         if (av_frame_get_buffer(m_frame, 0) < 0) {
             fprintf(stderr, "Error allocating an audio buffer\n");

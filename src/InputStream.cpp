@@ -6,6 +6,8 @@
 InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx)
 {
     m_source_url = source_url;
+    m_output_codec_ctx = output_codec_ctx;
+    m_default_frame_size = DEFAULT_FRAME_SIZE;
     
     /*open input file and deduce the right format context from the file*/
     
@@ -24,7 +26,7 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
 
     /*initialise the codec etc*/
-    if (open_codec_context(&m_input_codec_ctx, m_format_ctx, AVMEDIA_TYPE_AUDIO, m_source_url) >= 0) 
+    if (open_codec_context(AVMEDIA_TYPE_AUDIO) >= 0) 
     {
         m_audio_stream = m_format_ctx->streams[m_audio_stream_idx];
     } 
@@ -36,16 +38,12 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         fprintf(stderr, "Could not find audio stream in the input, aborting\n");
         cleanup();
         std::exit(1);
-    }    
+    } 
+    m_temp_frame = alloc_frame(m_input_codec_ctx);
+    m_frame = alloc_frame(m_output_codec_ctx);
+    m_out_frame = alloc_frame(m_output_codec_ctx);
+    m_output_frame_size = m_out_frame->nb_samples;   
 
-    m_frame = av_frame_alloc();
-    if (!m_frame) 
-    {
-        fprintf(stderr, "Could not allocate frame\n");
-        cleanup();
-        std::exit(1);
-        
-    }
 
     m_pkt = av_packet_alloc();
     if (!m_pkt) 
@@ -57,6 +55,39 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
         if (m_audio_stream)
         printf("Demuxing audio from URL '%s'\n", m_source_url); 
+
+        /* create resampler context */
+    m_swr_ctx = swr_alloc();
+    if (!m_swr_ctx) {
+        fprintf(stderr, "Could not allocate resampler context\n");
+        exit(1);
+    }
+ 
+    /* set options */
+    av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &m_input_codec_ctx->ch_layout,      0);
+    av_opt_set_int       (m_swr_ctx, "in_sample_rate",     m_input_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      m_input_codec_ctx->sample_fmt,     0);
+    av_opt_set_chlayout  (m_swr_ctx, "out_chlayout",      &m_output_codec_ctx->ch_layout,      0);
+    av_opt_set_int       (m_swr_ctx, "out_sample_rate",    m_output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(m_swr_ctx, "out_sample_fmt",     m_output_codec_ctx->sample_fmt,     0);
+ 
+    /* initialize the resampling context */
+    if ((swr_init(m_swr_ctx)) < 0) {
+        fprintf(stderr, "Failed to initialize the resampling context\n");
+        exit(1);
+    }
+
+    m_dst_nb_samples = av_rescale_rnd(swr_get_delay(m_swr_ctx, m_input_codec_ctx->sample_rate) + m_temp_frame->nb_samples,
+                                        m_output_codec_ctx->sample_rate, m_input_codec_ctx->sample_rate, AV_ROUND_UP);
+
+    m_frame -> nb_samples = m_dst_nb_samples; 
+    m_input_data_size = av_get_bytes_per_sample(m_input_codec_ctx->sample_fmt);
+    if (m_input_data_size < 0) {
+        /* This should not occur, checking just for paranoia */
+        fprintf(stderr, "Failed to calculate data size\n");
+        cleanup();
+        exit(1);
+    }
 }
 
 /*destructor*/
@@ -72,9 +103,10 @@ void InputStream::cleanup()
     avformat_close_input(&m_format_ctx);
     av_packet_free(&m_pkt);   
     av_frame_free(&m_frame);
+    swr_free(&m_swr_ctx);
 }
 
-bool InputStream::decode_one_frame()
+int InputStream::decode_one_input_frame()
 {
     if (!m_got_frame)
     {
@@ -82,9 +114,9 @@ bool InputStream::decode_one_frame()
         if (m_ret < 0)
         {
             if (m_ret == AVERROR_EOF)
-                return false;
+                return m_ret;
             printf("Error reading a packet from file\n");
-            return false;
+            return m_ret;
         }
             
 
@@ -92,13 +124,16 @@ bool InputStream::decode_one_frame()
         if (m_ret < 0)
         {
             printf("Error submitting a packet for decoding\n");
-            return false;
+            return m_ret;
         }
     }
     
     if (m_ret >= 0)
     {
-        m_ret = avcodec_receive_frame(m_input_codec_ctx, m_frame);
+        m_ret = avcodec_receive_frame(m_input_codec_ctx, m_temp_frame);
+
+        
+        
         if (m_ret < 0) 
         {
             // those two return values are special and mean there is no output
@@ -108,26 +143,152 @@ bool InputStream::decode_one_frame()
                 m_ret = 0;
                 m_got_frame = false;
                 av_packet_unref (m_pkt);
-                return decode_one_frame();
+                return decode_one_input_frame();
             }
 
             printf("Error during decoding\n");
-            return false;
+            return m_ret;
         }
         m_got_frame = true;
-        return true;
+
+        
+        return m_ret;
 
     }
 
-   return false;
+   return m_ret;
 }
+
+int InputStream::resample_one_input_frame()
+{
+    
+    
+    av_assert0(m_dst_nb_samples == m_frame->nb_samples);
+    m_ret=av_frame_make_writable(m_frame);
+    m_ret=swr_convert(m_swr_ctx, m_frame->data, m_dst_nb_samples, 
+                        (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
+    if (m_ret < 0)
+    {
+        printf("error resampling frame: %s\n", av_error_to_string(m_ret));
+        cleanup();
+        exit(1);
+    }
+    return m_ret;
+}
+
+bool InputStream::get_one_output_frame()
+{
+    int i = 0;
+    int ch = 0;
+    int number_buffered_samples = 0;
+    int number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
+    
+    while (number_buffered_samples < number_samples_required)
+    {
+        if (decode_one_input_frame() < 0) return false;
+        if (resample_one_input_frame() < 0) return false;
+
+        for (i = 0; i < m_temp_frame->nb_samples; i++)
+            for (ch = 0; ch < m_input_codec_ctx->ch_layout.nb_channels; ch++)
+                //std::cout<<*(m_temp_frame->data[ch] + m_input_data_size*i) <<'\n';
+                m_raw_sample_queue.push_front(*(m_temp_frame->data[ch] + m_input_data_size*i));
+        
+        number_buffered_samples = m_raw_sample_queue.size(); 
+
+    }
+    
+
+
+
+    
+    int x = 1;
+  
+    
+
+
+}
+
+
 
 void InputStream::unref_frame()
 {
-    av_frame_unref(m_frame);
+    av_frame_unref(m_temp_frame);
 }
 
+int InputStream::open_codec_context(enum AVMediaType type)
+{
+    int ret;
+    AVStream *st{};
+    const AVCodec* dec{};
+ 
+    
+        st = m_format_ctx->streams[0];
+ 
+        /* find decoder for the stream */
+        dec = avcodec_find_decoder(st->codecpar->codec_id);
+        if (!dec) {
+            fprintf(stderr, "Failed to find %s codec\n",
+                    av_get_media_type_string(type));
+            return AVERROR(EINVAL);
+        }
+ 
+        /* Allocate a codec context for the decoder */
+        m_input_codec_ctx = avcodec_alloc_context3(dec);
+        if (!m_input_codec_ctx) {
+            fprintf(stderr, "Failed to allocate the %s codec context\n",
+                    av_get_media_type_string(type));
+            return AVERROR(ENOMEM);
+        }
+ 
+        /* Copy codec parameters from input stream to codec context */
+        if ((ret = avcodec_parameters_to_context(m_input_codec_ctx, st->codecpar)) < 0) {
+            fprintf(stderr, "Failed to copy %s codec parameters to decoder context\n",
+                    av_get_media_type_string(type));
+            return ret;
+        }
+ 
+        /* Init the decoders */
+        if ((ret = avcodec_open2(m_input_codec_ctx, dec, NULL)) < 0) {
+            fprintf(stderr, "Failed to open %s codec\n",
+                    av_get_media_type_string(type));
+            return ret;
+        }
+       
+    
+ 
+    return 0;
 
+}
+
+AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
+{
+    AVFrame* frame = av_frame_alloc();
+    int nb_samples;
+    if (!frame) {
+        fprintf(stderr, "Error allocating an audio frame\n");
+        cleanup();
+        exit(1);
+    }
+    if (codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+        nb_samples = DEFAULT_FRAME_SIZE;
+    else
+        nb_samples = codec_context->frame_size;
+ 
+    frame->format = codec_context -> sample_fmt;
+    av_channel_layout_copy(&frame->ch_layout, &codec_context->ch_layout);
+    frame->sample_rate = codec_context -> sample_rate;
+    frame->nb_samples = nb_samples;
+ 
+    if (nb_samples) {
+        if (av_frame_get_buffer(frame, 0) < 0) {
+            fprintf(stderr, "Error allocating an audio buffer\n");
+            cleanup();
+            exit(1);
+        }
+    }
+ 
+    return frame;
+}
 
 
 
