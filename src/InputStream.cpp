@@ -41,8 +41,7 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
     } 
     m_temp_frame = alloc_frame(m_input_codec_ctx);
     m_frame = alloc_frame(m_output_codec_ctx);
-    m_out_frame = alloc_frame(m_output_codec_ctx);
-    m_output_frame_size = m_out_frame->nb_samples;   
+    m_output_frame_size = m_frame->nb_samples;   
 
 
     m_pkt = av_packet_alloc();
@@ -77,12 +76,12 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         exit(1);
     }
 
-    m_dst_nb_samples = av_rescale_rnd(swr_get_delay(m_swr_ctx, m_input_codec_ctx->sample_rate) + m_temp_frame->nb_samples,
-                                        m_output_codec_ctx->sample_rate, m_input_codec_ctx->sample_rate, AV_ROUND_UP);
+    /*m_dst_nb_samples = av_rescale_rnd(swr_get_delay(m_swr_ctx, m_input_codec_ctx->sample_rate) + m_temp_frame->nb_samples,
+                                        m_output_codec_ctx->sample_rate, m_input_codec_ctx->sample_rate, AV_ROUND_UP);*/
 
-    m_frame -> nb_samples = m_dst_nb_samples; 
-    m_input_data_size = av_get_bytes_per_sample(m_input_codec_ctx->sample_fmt);
-    if (m_input_data_size < 0) {
+    
+    m_output_data_size = av_get_bytes_per_sample(m_output_codec_ctx->sample_fmt);
+    if (m_output_data_size < 0) {
         /* This should not occur, checking just for paranoia */
         fprintf(stderr, "Failed to calculate data size\n");
         cleanup();
@@ -142,6 +141,7 @@ int InputStream::decode_one_input_frame()
             {
                 m_ret = 0;
                 m_got_frame = false;
+                //get the next packet
                 av_packet_unref (m_pkt);
                 return decode_one_input_frame();
             }
@@ -163,57 +163,86 @@ int InputStream::resample_one_input_frame()
 {
     
     
+    m_dst_nb_samples = swr_get_out_samples(m_swr_ctx, m_temp_frame->nb_samples);
+    m_frame -> nb_samples = m_dst_nb_samples;
+
     av_assert0(m_dst_nb_samples == m_frame->nb_samples);
     m_ret=av_frame_make_writable(m_frame);
     m_ret=swr_convert(m_swr_ctx, m_frame->data, m_dst_nb_samples, 
                         (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
+    
     if (m_ret < 0)
     {
         printf("error resampling frame: %s\n", av_error_to_string(m_ret));
         cleanup();
         exit(1);
     }
+    m_actual_nb_samples = m_ret;
+    av_frame_unref(m_temp_frame);
     return m_ret;
 }
 
+/*decodes and resamples enough data from the input to produce exactly one output sized frame*/
 bool InputStream::get_one_output_frame()
 {
     int i = 0;
     int ch = 0;
-    int number_buffered_samples = 0;
-    int number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
+    int number_samples_required = 0;
+    int number_channel_fields = 0;
+
+    /*for planar formats (1 data field for each channel)*/
+    if (av_sample_fmt_is_planar(m_output_codec_ctx->sample_fmt))
+    {
+        number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
+        number_channel_fields = m_output_codec_ctx->ch_layout.nb_channels;
+    }
+    /*for non-planar formats (all data in one field, alternating through channels)*/
+    else 
+    {
+        number_samples_required = m_output_frame_size;
+        number_channel_fields = 1;
+    }
     
-    while (number_buffered_samples < number_samples_required)
+    
+    /*buffer up enough samples to create an output frame*/
+    while (m_number_buffered_samples < number_samples_required)
     {
         if (decode_one_input_frame() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
 
-        /*push samples to queue buffer using pointer arithmetic*/
-        for (i = 0; i < m_frame->nb_samples; i++)
-            for (ch = 0; ch < m_output_codec_ctx->ch_layout.nb_channels; ch++)
-                m_raw_sample_queue.push_front(*(m_frame->data[ch] + m_input_data_size*i));
-                av_frame_unref(m_frame);
+        /*push samples from input frame to queue buffer using pointer arithmetic*/
         
-        number_buffered_samples = m_raw_sample_queue.size(); 
+        for (i = 0; i < m_actual_nb_samples; i++)
+            for (ch = 0; ch < number_channel_fields; ch++)
+                m_raw_sample_queue.push_front(*(m_frame->data[ch] + m_output_data_size*i));
+                    
+        
+        
+        m_number_buffered_samples = m_raw_sample_queue.size(); 
 
     }
-    
 
+    m_frame->nb_samples=m_output_frame_size;
+    m_ret=av_frame_make_writable(m_frame);
 
+    /*pop samples from queue buffer into output frame using pointer arithmetic*/
+    for (i = 0; i < m_output_frame_size; i++)
+        for (ch = 0; ch < number_channel_fields; ch++)
+        {
+            /**(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.back();*/
+            *(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.back();
+            m_raw_sample_queue.pop_back();
+        }
 
-    
-    int x = 1;
-  
-    
-
-
+    m_number_buffered_samples=m_raw_sample_queue.size();
+    return true;
 }
 
 
 
 void InputStream::unref_frame()
 {
-    av_frame_unref(m_temp_frame);
+    av_frame_unref(m_frame);
 }
 
 int InputStream::open_codec_context(enum AVMediaType type)

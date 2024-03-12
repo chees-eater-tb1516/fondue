@@ -14,7 +14,7 @@ extern "C"{
 #include<iostream>
 
 #define DEFAULT_BIT_RATE 192000
-#define DEFAULT_SAMPLE_RATE 48000
+#define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
 
 
@@ -32,17 +32,18 @@ class InputStream
         AVStream* m_audio_stream =  NULL;
         int m_audio_stream_idx {0};
         AVFrame* m_frame = NULL;
-        AVFrame* m_temp_frame = NULL;
-        AVFrame* m_out_frame = NULL;       
+        AVFrame* m_temp_frame = NULL;       
         AVPacket* m_pkt = NULL;
         bool m_got_frame = false;
         int m_ret{};
-        int m_input_data_size;
+        int m_output_data_size;
         struct SwrContext* m_swr_ctx;
         int m_dst_nb_samples;
         int m_default_frame_size;
         int m_output_frame_size;
+        int m_actual_nb_samples;
         std::deque<uint8_t> m_raw_sample_queue;
+        int m_number_buffered_samples = 0;
 
     public:
         /*normal constructor*/
@@ -84,7 +85,8 @@ class OutputStream
         AVCodecContext* m_output_codec_context = NULL;
         const AVCodec* m_output_codec = NULL;
         AVStream* m_audio_stream = NULL;
-        int64_t next_pts {0};
+        int m_samples_count {0};
+        int m_ret {0};
         AVFrame* m_frame;
         AVPacket* m_pkt;
         AVDictionary* m_output_options = NULL;
@@ -104,9 +106,9 @@ class OutputStream
 
         AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
 
-        //bool encode_one_frame();
+        int write_frame ();
 
-        //void unref_frame();
+        void finish_streaming ();
 
 
 
