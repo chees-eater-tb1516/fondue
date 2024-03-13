@@ -76,8 +76,14 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         exit(1);
     }
 
-    /*m_dst_nb_samples = av_rescale_rnd(swr_get_delay(m_swr_ctx, m_input_codec_ctx->sample_rate) + m_temp_frame->nb_samples,
-                                        m_output_codec_ctx->sample_rate, m_input_codec_ctx->sample_rate, AV_ROUND_UP);*/
+        /* Create the FIFO buffer based on the specified output sample format. */
+    if (!(m_queue = av_audio_fifo_alloc(m_output_codec_ctx->sample_fmt,
+                                      m_output_codec_ctx->ch_layout.nb_channels, 1))) 
+    {
+        fprintf(stderr, "Could not allocate FIFO\n");
+
+    }
+
 
     
     m_output_data_size = av_get_bytes_per_sample(m_output_codec_ctx->sample_fmt);
@@ -178,6 +184,7 @@ int InputStream::resample_one_input_frame()
         exit(1);
     }
     m_actual_nb_samples = m_ret;
+    m_frame->nb_samples=m_ret;
     av_frame_unref(m_temp_frame);
     return m_ret;
 }
@@ -185,22 +192,34 @@ int InputStream::resample_one_input_frame()
 /*decodes and resamples enough data from the input to produce exactly one output sized frame*/
 bool InputStream::get_one_output_frame()
 {
+    if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE )
+    {
+        if (decode_one_input_frame() < 0) return false;
+        if (resample_one_input_frame() < 0) return false;
+        return true;
+    }
+    
     int i = 0;
     int ch = 0;
     int number_samples_required = 0;
     int number_channel_fields = 0;
-
+    int multiplier = 0;
+    //m_output_data_size=2;
+    
     /*for planar formats (1 data field for each channel)*/
     if (av_sample_fmt_is_planar(m_output_codec_ctx->sample_fmt))
     {
         number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
         number_channel_fields = m_output_codec_ctx->ch_layout.nb_channels;
+        multiplier = 1;
     }
     /*for non-planar formats (all data in one field, alternating through channels)*/
     else 
     {
-        number_samples_required = m_output_frame_size;
+        number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
         number_channel_fields = 1;
+        multiplier = m_output_codec_ctx->ch_layout.nb_channels;
+        printf("warning, this probably doesn't work, see InputStream.cpp");
     }
     
     
@@ -210,15 +229,22 @@ bool InputStream::get_one_output_frame()
         if (decode_one_input_frame() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
 
-        /*push samples from input frame to queue buffer using pointer arithmetic*/
         
-        for (i = 0; i < m_actual_nb_samples; i++)
+
+        /*push samples from input frame to queue buffer using pointer arithmetic*/
+        int value = 0;
+        for (i = 0; i < m_actual_nb_samples*multiplier; i++)
             for (ch = 0; ch < number_channel_fields; ch++)
-                m_raw_sample_queue.push_front(*(m_frame->data[ch] + m_output_data_size*i));
+            {
+                value=*(m_frame->data[ch] + m_output_data_size*i);
+                m_raw_sample_queue.push(value);
+            }
+                
                     
         
         
         m_number_buffered_samples = m_raw_sample_queue.size(); 
+        //av_frame_unref(m_frame);
 
     }
 
@@ -226,12 +252,12 @@ bool InputStream::get_one_output_frame()
     m_ret=av_frame_make_writable(m_frame);
 
     /*pop samples from queue buffer into output frame using pointer arithmetic*/
-    for (i = 0; i < m_output_frame_size; i++)
+    for (i = 0; i < m_output_frame_size*multiplier; i++)
         for (ch = 0; ch < number_channel_fields; ch++)
         {
             /**(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.back();*/
-            *(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.back();
-            m_raw_sample_queue.pop_back();
+            *(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.front();
+            m_raw_sample_queue.pop();
         }
 
     m_number_buffered_samples=m_raw_sample_queue.size();

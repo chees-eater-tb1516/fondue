@@ -8,14 +8,15 @@ extern "C"{
 #include <libavutil/opt.h>
 #include <libavutil/error.h>
 #include <libavutil/avassert.h>
+#include<libavutil/audio_fifo.h>
 } 
 #include<cstdlib>
-#include<deque>
+#include<queue>
 #include<iostream>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
-#define DEFAULT_FRAME_SIZE 10000
+#define DEFAULT_FRAME_SIZE 44100
 
 
 char* av_error_to_string(int error_code);
@@ -42,7 +43,8 @@ class InputStream
         int m_default_frame_size;
         int m_output_frame_size;
         int m_actual_nb_samples;
-        std::deque<uint8_t> m_raw_sample_queue;
+        AVAudioFifo* m_queue = NULL;
+        std::queue<uint8_t> m_raw_sample_queue;
         int m_number_buffered_samples = 0;
 
     public:
@@ -87,6 +89,7 @@ class OutputStream
         AVStream* m_audio_stream = NULL;
         int m_samples_count {0};
         int m_ret {0};
+        int m_nb_samples{0};
         AVFrame* m_frame;
         AVPacket* m_pkt;
         AVDictionary* m_output_options = NULL;

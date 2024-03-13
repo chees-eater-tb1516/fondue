@@ -70,7 +70,7 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
    
         int i;
 
-        m_output_codec_context->sample_fmt  = (m_output_codec)->sample_fmts ?
+        m_output_codec_context->sample_fmt  =(m_output_codec)->sample_fmts ?
             (m_output_codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
         m_output_codec_context->bit_rate    = DEFAULT_BIT_RATE;
         m_output_codec_context->sample_rate = DEFAULT_SAMPLE_RATE;
@@ -103,7 +103,7 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     /* copy the options into a temp dictionary*/
     AVDictionary* opt = NULL;
     //int ret = 0;
-    int nb_samples;
+    
     av_dict_copy(&opt, m_output_options, 0);
     /* open the codec with any required options*/
     m_ret = avcodec_open2(m_output_codec_context, m_output_codec, &opt);
@@ -118,9 +118,9 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
 
     /*ensures a frame with > 0 samples is created even if the codec context has a frame size of zero (implies variable frame size?)*/
     if (m_output_codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-        nb_samples = DEFAULT_FRAME_SIZE;
+        m_nb_samples = DEFAULT_FRAME_SIZE;
     else
-        nb_samples = m_output_codec_context->frame_size;
+        m_nb_samples = m_output_codec_context->frame_size;
 
 
     /* allocate an empty frame*/
@@ -136,16 +136,16 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     m_frame->format = m_output_codec_context->sample_fmt;
     av_channel_layout_copy(&m_frame->ch_layout, &m_output_codec_context->ch_layout);
     m_frame->sample_rate = DEFAULT_SAMPLE_RATE;
-    m_frame->nb_samples = nb_samples;
+    m_frame->nb_samples = m_nb_samples;
 
     /*allocate the audio buffers in the frame*/
-    if (nb_samples) {
+    /*if (m_nb_samples) {
         if (av_frame_get_buffer(m_frame, 0) < 0) {
             fprintf(stderr, "Error allocating an audio buffer\n");
             cleanup();
             exit(1);
         }
-    }
+    }*/
 
     m_ret = avcodec_parameters_from_context(m_audio_stream->codecpar, m_output_codec_context);
     if (m_ret < 0) {
@@ -197,7 +197,7 @@ void OutputStream::cleanup()
 
 int OutputStream::write_frame()
 {
-    av_assert0(m_frame->nb_samples == m_output_codec_context->frame_size);
+    //av_assert0(m_frame->nb_samples == m_nb_samples);
     m_frame->pts = av_rescale_q(m_samples_count, (AVRational){1, m_output_codec_context->sample_rate},
                                 m_output_codec_context->time_base);
     m_samples_count += m_frame -> nb_samples;
