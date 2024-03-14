@@ -13,9 +13,10 @@ extern "C"{
 #include<cstdlib>
 #include<queue>
 #include<iostream>
+#include<ctime>
 
 #define DEFAULT_BIT_RATE 192000
-#define DEFAULT_SAMPLE_RATE 24000
+#define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
 
 
@@ -59,6 +60,8 @@ class InputStream
 
         /*get one frame of raw audio from the input resource*/
         int decode_one_input_frame();
+
+        int decode_one_input_frame_realtime();
 
         /*convert the sample format, sample rate and channel layout of the input frame to 
         those which the output encoder requires. NOTE the resulting frame will most likely 

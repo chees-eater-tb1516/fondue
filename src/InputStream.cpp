@@ -165,6 +165,23 @@ int InputStream::decode_one_input_frame()
    return m_ret;
 }
 
+int InputStream::decode_one_input_frame_realtime()
+{
+    bool got_frame = false;
+    time_t next_frame_time = std::time(nullptr);
+
+    while (!got_frame)
+    {   
+        if (std::time(nullptr) >= next_frame_time)
+        {
+            if (m_ret = decode_one_input_frame() < 0) return m_ret;
+            next_frame
+        }
+
+
+    }
+}
+
 int InputStream::resample_one_input_frame()
 {
     
@@ -211,7 +228,7 @@ bool InputStream::get_one_output_frame()
     /*buffer up enough samples to create one output sized frame*/
     while(m_number_buffered_samples < m_output_frame_size)
     {
-        if (decode_one_input_frame() < 0) return false;
+        if (decode_one_input_frame_realtime() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
         if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples)< m_frame->nb_samples)
         {
