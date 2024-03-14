@@ -15,8 +15,8 @@ extern "C"{
 #include<iostream>
 
 #define DEFAULT_BIT_RATE 192000
-#define DEFAULT_SAMPLE_RATE 44100
-#define DEFAULT_FRAME_SIZE 44100
+#define DEFAULT_SAMPLE_RATE 24000
+#define DEFAULT_FRAME_SIZE 10000
 
 
 char* av_error_to_string(int error_code);

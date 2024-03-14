@@ -192,76 +192,50 @@ int InputStream::resample_one_input_frame()
 /*decodes and resamples enough data from the input to produce exactly one output sized frame*/
 bool InputStream::get_one_output_frame()
 {
-    if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE )
+    
+    /*if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
     {
         if (decode_one_input_frame() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
         return true;
-    }
-    
-    int i = 0;
-    int ch = 0;
-    int number_samples_required = 0;
-    int number_channel_fields = 0;
-    int multiplier = 0;
-    //m_output_data_size=2;
-    
-    /*for planar formats (1 data field for each channel)*/
-    if (av_sample_fmt_is_planar(m_output_codec_ctx->sample_fmt))
+    }*/
+
+    /*ensure the queue is long enough to contain 1 more input frame than required*/
+    if(av_audio_fifo_realloc(m_queue, m_output_frame_size+m_frame->nb_samples) < 0)
     {
-        number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
-        number_channel_fields = m_output_codec_ctx->ch_layout.nb_channels;
-        multiplier = 1;
+        fprintf(stderr, "could not reallocate FIFO");
+        return false;
     }
-    /*for non-planar formats (all data in one field, alternating through channels)*/
-    else 
-    {
-        number_samples_required = m_output_frame_size * m_output_codec_ctx -> ch_layout.nb_channels;
-        number_channel_fields = 1;
-        multiplier = m_output_codec_ctx->ch_layout.nb_channels;
-        printf("warning, this probably doesn't work, see InputStream.cpp");
-    }
-    
-    
-    /*buffer up enough samples to create an output frame*/
-    while (m_number_buffered_samples < number_samples_required)
+
+
+    /*buffer up enough samples to create one output sized frame*/
+    while(m_number_buffered_samples < m_output_frame_size)
     {
         if (decode_one_input_frame() < 0) return false;
         if (resample_one_input_frame() < 0) return false;
-
-        
-
-        /*push samples from input frame to queue buffer using pointer arithmetic*/
-        int value = 0;
-        for (i = 0; i < m_actual_nb_samples*multiplier; i++)
-            for (ch = 0; ch < number_channel_fields; ch++)
-            {
-                value=*(m_frame->data[ch] + m_output_data_size*i);
-                m_raw_sample_queue.push(value);
-            }
-                
-                    
-        
-        
-        m_number_buffered_samples = m_raw_sample_queue.size(); 
-        //av_frame_unref(m_frame);
-
+        if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples)< m_frame->nb_samples)
+        {
+            fprintf(stderr, "could not write data to FIFO\n");
+            return false;
+        }
+        m_number_buffered_samples = av_audio_fifo_size(m_queue);
     }
 
-    m_frame->nb_samples=m_output_frame_size;
+    m_frame->nb_samples = m_output_frame_size;
     m_ret=av_frame_make_writable(m_frame);
 
-    /*pop samples from queue buffer into output frame using pointer arithmetic*/
-    for (i = 0; i < m_output_frame_size*multiplier; i++)
-        for (ch = 0; ch < number_channel_fields; ch++)
-        {
-            /**(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.back();*/
-            *(m_frame->data[ch] + m_output_data_size*i) = m_raw_sample_queue.front();
-            m_raw_sample_queue.pop();
-        }
+    /*insert the correct number of samples from the queue into the output frame*/
+    if (av_audio_fifo_read(m_queue, (void **)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples) 
+    {
+        fprintf(stderr, "Could not read data from FIFO\n");
+        av_frame_free(&m_frame);
+        return false;
+    }
 
-    m_number_buffered_samples=m_raw_sample_queue.size();
+    m_number_buffered_samples = av_audio_fifo_size(m_queue);
+    
     return true;
+  
 }
 
 
