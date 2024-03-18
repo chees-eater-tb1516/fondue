@@ -14,6 +14,7 @@ extern "C"{
 #include<queue>
 #include<iostream>
 #include<ctime>
+#include"unistd.h"
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100

@@ -23,7 +23,7 @@ int main()
         test_output.set_frame(test_input.get_frame());
         test_output.write_frame();
         frame_count ++;
-        std::cout<<frame_count<<'\n';
+        //std::cout<<frame_count<<'\n';
     }
         
     test_output.finish_streaming();  

@@ -173,7 +173,7 @@ int InputStream::decode_one_input_frame_realtime()
     {   
         if (std::clock() >= m_next_frame_time)
         {
-            if (m_ret = decode_one_input_frame() < 0) 
+            if ((m_ret = decode_one_input_frame()) < 0) 
             {
                 return m_ret;
             }
@@ -182,6 +182,7 @@ int InputStream::decode_one_input_frame_realtime()
             return 0;
             
         }
+        //sleep(0.01);
 
 
     }
