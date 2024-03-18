@@ -47,6 +47,7 @@ class InputStream
         AVAudioFifo* m_queue = NULL;
         std::queue<uint8_t> m_raw_sample_queue;
         int m_number_buffered_samples = 0;
+        time_t m_next_frame_time = std::clock();
 
     public:
         /*normal constructor*/

@@ -167,15 +167,20 @@ int InputStream::decode_one_input_frame()
 
 int InputStream::decode_one_input_frame_realtime()
 {
-    bool got_frame = false;
-    time_t next_frame_time = std::time(nullptr);
+    
 
-    while (!got_frame)
+    while (true)
     {   
-        if (std::time(nullptr) >= next_frame_time)
+        if (std::clock() >= m_next_frame_time)
         {
-            if (m_ret = decode_one_input_frame() < 0) return m_ret;
-            next_frame
+            if (m_ret = decode_one_input_frame() < 0) 
+            {
+                return m_ret;
+            }
+            m_next_frame_time += (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/ m_temp_frame->sample_rate;
+
+            return 0;
+            
         }
 
 
