@@ -168,24 +168,19 @@ int InputStream::decode_one_input_frame()
 int InputStream::decode_one_input_frame_realtime()
 {
     
-
-    while (true)
-    {   
-        if (std::clock() >= m_next_frame_time)
-        {
-            if ((m_ret = decode_one_input_frame()) < 0) 
-            {
-                return m_ret;
-            }
-            m_next_frame_time += (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/ m_temp_frame->sample_rate;
-
-            return 0;
-            
-        }
-        //sleep(0.01);
-
-
+    if ((m_ret = decode_one_input_frame()) < 0) 
+    {
+        return m_ret;
     }
+    /*work out how much audio is in the frame in units of clock ticks*/
+    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
+    /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
+    struct timespec sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
+    /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
+    m_end_time = std::clock();
+    /*put the thread to sleep for the calculated amount of time*/
+    nanosleep(&sleep_time, NULL);
+    return 0;
 }
 
 int InputStream::resample_one_input_frame()

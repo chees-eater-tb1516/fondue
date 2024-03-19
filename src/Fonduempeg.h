@@ -10,11 +10,13 @@ extern "C"{
 #include <libavutil/avassert.h>
 #include<libavutil/audio_fifo.h>
 } 
-#include<cstdlib>
+
 #include<queue>
 #include<iostream>
+#include<time.h>
 #include<ctime>
-#include"unistd.h"
+#include<chrono>
+#include<cmath>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
@@ -22,6 +24,8 @@ extern "C"{
 
 
 char* av_error_to_string(int error_code);
+
+struct timespec get_timespec_from_ticks(int ticks);
 
 class InputStream 
 {
@@ -48,7 +52,8 @@ class InputStream
         AVAudioFifo* m_queue = NULL;
         std::queue<uint8_t> m_raw_sample_queue;
         int m_number_buffered_samples = 0;
-        time_t m_next_frame_time = std::clock();
+        time_t m_ticks_per_frame {};
+        time_t m_end_time {};
 
     public:
         /*normal constructor*/
