@@ -26,19 +26,14 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
 
     /*initialise the codec etc*/
-    if (open_codec_context(AVMEDIA_TYPE_AUDIO) >= 0) 
-    {
-        m_audio_stream = m_format_ctx->streams[m_audio_stream_idx];
-    } 
+    open_codec_context(AVMEDIA_TYPE_AUDIO);
+
+        
+    
 
     av_dump_format(m_format_ctx, 0, m_source_url, 0);
 
-    if (!m_audio_stream) 
-    {
-        fprintf(stderr, "Could not find audio stream in the input, aborting\n");
-        cleanup();
-        std::exit(1);
-    } 
+
     m_temp_frame = alloc_frame(m_input_codec_ctx);
     m_frame = alloc_frame(m_output_codec_ctx);
     m_output_frame_size = m_frame->nb_samples;   
@@ -52,8 +47,8 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         std::exit(1);
     }
 
-        if (m_audio_stream)
-        printf("Demuxing audio from URL '%s'\n", m_source_url); 
+
+    printf("Demuxing audio from URL '%s'\n", m_source_url); 
 
         /* create resampler context */
     m_swr_ctx = swr_alloc();
@@ -84,15 +79,6 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
     }
 
-
-    
-    m_output_data_size = av_get_bytes_per_sample(m_output_codec_ctx->sample_fmt);
-    if (m_output_data_size < 0) {
-        /* This should not occur, checking just for paranoia */
-        fprintf(stderr, "Failed to calculate data size\n");
-        cleanup();
-        exit(1);
-    }
 }
 
 /*destructor*/

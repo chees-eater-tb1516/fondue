@@ -36,21 +36,17 @@ class InputStream
         /*needs reference to the output codec context in order to be 
         able to output frames in the correct format*/
         AVCodecContext* m_output_codec_ctx = NULL;
-        AVStream* m_audio_stream =  NULL;
-        int m_audio_stream_idx {0};
         AVFrame* m_frame = NULL;
         AVFrame* m_temp_frame = NULL;       
         AVPacket* m_pkt = NULL;
         bool m_got_frame = false;
         int m_ret{};
-        int m_output_data_size;
         struct SwrContext* m_swr_ctx;
         int m_dst_nb_samples;
         int m_default_frame_size;
         int m_output_frame_size;
         int m_actual_nb_samples;
         AVAudioFifo* m_queue = NULL;
-        std::queue<uint8_t> m_raw_sample_queue;
         int m_number_buffered_samples = 0;
         time_t m_ticks_per_frame {};
         time_t m_end_time {};
@@ -85,6 +81,27 @@ class InputStream
 
         AVFrame* alloc_frame(AVCodecContext* codec_context);
     
+};
+
+class DefaultInputStream
+{   
+    AVCodecContext* m_output_codec_ctx = NULL;
+    AVFrame* m_frame = NULL;
+    AVFrame* m_temp_frame = NULL;
+    struct SwrContext* m_swr_ctx;
+    int m_ret{};
+    int m_output_data_size;
+
+    public:
+    /*constructor*/
+    DefaultInputStream(AVCodecContext* output_codec_ctx);
+    /*destructor*/
+    ~DefaultInputStream();
+
+    void cleanup();
+
+    bool get_one_output_frame();
+
 };
 
 
