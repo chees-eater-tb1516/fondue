@@ -11,9 +11,8 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
 
     if (!m_frame)
     {
-        fprintf(stderr, "Error allocating an audio frame\n");
         cleanup();
-        exit(1);
+        throw "Default input: error allocating an audio frame";
     }
 
     int nb_samples{};
@@ -35,9 +34,8 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
     {
         if (av_frame_get_buffer(m_frame,0) < 0)
         {
-            fprintf(stderr, "Error allocating an audio buffer\n");
             cleanup();
-            exit(1);
+            throw "Default input: error allocating an audio buffer";
         }
     }
 
@@ -48,9 +46,8 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
 
     if (!m_temp_frame)
     {
-        fprintf(stderr, "Error allocating an audio frame\n");
         cleanup();
-        exit(1);
+        throw "Default input: error allocating a temporary audio frame";
     }
 
     m_temp_frame->format = AV_SAMPLE_FMT_S16;
@@ -62,9 +59,8 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
     {
         if (av_frame_get_buffer(m_temp_frame,0) < 0)
         {
-            fprintf(stderr, "Error allocating an audio buffer\n");
             cleanup();
-            exit(1);
+            throw "Default input: error allocating a temporary audio buffer";
         }
     }
 
@@ -74,8 +70,8 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
     m_swr_ctx = swr_alloc();
     if (!m_swr_ctx) 
     {
-        fprintf(stderr, "Could not allocate resampler context\n");
-        exit(1);
+        cleanup();
+        throw "Default input: error allocating a resampler context";
     }
 
     av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &default_channel_layout,      0);
@@ -86,17 +82,19 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
     av_opt_set_sample_fmt(m_swr_ctx, "out_sample_fmt",     m_output_codec_ctx->sample_fmt,     0);
  
     /* initialize the resampling context */
-    if ((swr_init(m_swr_ctx)) < 0) {
-        fprintf(stderr, "Failed to initialize the resampling context\n");
-        exit(1);
+    if ((swr_init(m_swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "Default input: error initialising the resampling context";
+
     }
 
     m_output_data_size = av_get_bytes_per_sample(m_output_codec_ctx->sample_fmt);
-    if (m_output_data_size < 0) {
+    if (m_output_data_size < 0) 
+    {
         /* This should not occur, checking just for paranoia */
-        fprintf(stderr, "Failed to calculate data size\n");
         cleanup();
-        exit(1);
+        throw "Default input: failed to calculate data size";
     }
 
     /*work out how much audio is in the frame in units of clock ticks*/
@@ -135,8 +133,8 @@ bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode, SourceTim
                 v = 0;
                 break;
             case +DefaultSourceModes::white_noise:
-            /*fullscale = 5000 gives quiet white noise*/
-                fullscale=500;
+            /*fullscale = 100 gives quiet white noise*/
+                fullscale=100;
                 v = (static_cast<float>(std::rand())/RAND_MAX -0.5)*fullscale;
                 break;
             default:
@@ -161,7 +159,7 @@ bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode, SourceTim
     {
         printf("error resampling frame: %s\n", av_error_to_string(m_ret));
         cleanup();
-        exit(1);
+        throw "Default input: error resampling frame";
     }
 
     switch(+timing)
@@ -194,5 +192,5 @@ bool DefaultInputStream::get_one_output_frame(SourceTimingModes timing)
 {
     DefaultSourceModes default_source_mode = DefaultSourceModes::white_noise;
 
-    DefaultInputStream::get_one_output_frame(default_source_mode, timing);
+    return DefaultInputStream::get_one_output_frame(default_source_mode, timing);
 }

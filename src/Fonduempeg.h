@@ -1,3 +1,17 @@
+/*
+* Written by Tom Briggs in 2024
+*
+* Fonduempeg is a C++ API for audio encoding calling upon the C API of FFmpeg. 
+* 
+* It aims to provide an easier user experience by handling much of the boilerplate 
+* code in the C API within the constructor functions of the classes defined here.  
+* It also uses frames as its smallest unit of audio rather the individual samples.
+* The frame size is dictated by the codec used but is typically of the order of 1000 samples.
+*  
+*
+*
+*/
+
 #ifndef FONDUEMPEG_H
 #define FONDUEMPEG_H
 
@@ -50,7 +64,7 @@ class InputStream
         AVFormatContext* m_format_ctx = NULL;
         AVCodecContext* m_input_codec_ctx = NULL;
         /*needs reference to the output codec context in order to be 
-        able to output frames in the correct format*/
+        able to prepare output frames in the correct format*/
         AVCodecContext* m_output_codec_ctx = NULL;
         AVFrame* m_frame = NULL;
         AVFrame* m_temp_frame = NULL;       

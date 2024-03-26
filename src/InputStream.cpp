@@ -13,20 +13,21 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
     
     if (avformat_open_input(&m_format_ctx, m_source_url, NULL, &options) < 0)
     {
-        fprintf(stderr, "Couldn't open source file %s\n", m_source_url);
-        std::exit(1);
+        throw "Input: couldn't open source";
     }
 
     /*retrieve stream information from the format context*/
     if (avformat_find_stream_info(m_format_ctx, NULL) < 0)
     {
-        fprintf(stderr, "Could not find stream information\n");
-        std::exit(1);
+        throw "Input: could not find stream information";
     }
 
 
     /*initialise the codec etc*/
-    open_codec_context(AVMEDIA_TYPE_AUDIO);
+    if (open_codec_context(AVMEDIA_TYPE_AUDIO) < 0)
+    {
+        throw "Input: could not open codec context";
+    }
 
         
     
@@ -42,19 +43,19 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
     m_pkt = av_packet_alloc();
     if (!m_pkt) 
     {
-        fprintf(stderr, "Could not allocate packet\n");
         cleanup();
-        std::exit(1);
+        throw "Input: could not allocate packet";
     }
 
 
-    printf("Demuxing audio from URL '%s'\n", m_source_url); 
+    //printf("Demuxing audio from URL '%s'\n", m_source_url); 
 
         /* create resampler context */
     m_swr_ctx = swr_alloc();
     if (!m_swr_ctx) {
-        fprintf(stderr, "Could not allocate resampler context\n");
-        exit(1);
+        cleanup();
+        throw "Input: could not allocate a resampler context";
+        
     }
  
     /* set options */
@@ -67,16 +68,16 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
  
     /* initialize the resampling context */
     if ((swr_init(m_swr_ctx)) < 0) {
-        fprintf(stderr, "Failed to initialize the resampling context\n");
-        exit(1);
+        cleanup();
+        throw "Input: failed to initialise the resampler contexr";
     }
 
         /* Create the FIFO buffer based on the specified output sample format. */
     if (!(m_queue = av_audio_fifo_alloc(m_output_codec_ctx->sample_fmt,
                                       m_output_codec_ctx->ch_layout.nb_channels, 1))) 
     {
-        fprintf(stderr, "Could not allocate FIFO\n");
-
+        cleanup();
+        throw "Input: failed to allocate audio samples queue";
     }
 
 }
@@ -195,10 +196,8 @@ int InputStream::resample_one_input_frame()
                         (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
     
     if (m_ret < 0)
-    {
-        printf("error resampling frame: %s\n", av_error_to_string(m_ret));
-        cleanup();
-        exit(1);
+    {   
+        return m_ret;
     }
     m_actual_nb_samples = m_ret;
     m_frame->nb_samples=m_ret;
@@ -322,10 +321,10 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
 {
     AVFrame* frame = av_frame_alloc();
     int nb_samples;
-    if (!frame) {
-        fprintf(stderr, "Error allocating an audio frame\n");
+    if (!frame) 
+    {
         cleanup();
-        exit(1);
+        throw "Input: error allocating an audio frame";
     }
     if (codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
         nb_samples = DEFAULT_FRAME_SIZE;
@@ -338,10 +337,10 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
     frame->nb_samples = nb_samples;
  
     if (nb_samples) {
-        if (av_frame_get_buffer(frame, 0) < 0) {
-            fprintf(stderr, "Error allocating an audio buffer\n");
+        if (av_frame_get_buffer(frame, 0) < 0) 
+        {
             cleanup();
-            exit(1);
+            throw "Input: error allocating an audio buffer";
         }
     }
  
