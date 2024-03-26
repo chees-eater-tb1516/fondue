@@ -1,6 +1,6 @@
 #include"Fonduempeg.h"
 
-
+/*normal constructor, does most of the FFMpeg boilerplate stuff*/
 DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
 {
     m_output_codec_ctx = output_codec_ctx;
@@ -99,11 +99,16 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
         exit(1);
     }
 
+    /*work out how much audio is in the frame in units of clock ticks*/
+    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
+
+
+
 
 
 
 }
-/*facilitates exiting elegantlu*/
+/*facilitates exiting elegantly*/
 void DefaultInputStream::cleanup()
 {
     av_frame_free(&m_frame);
@@ -117,7 +122,77 @@ DefaultInputStream::~DefaultInputStream()
 }
 
 
-bool DefaultInputStream::get_one_output_frame()
+bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode, SourceTimingModes timing)
 {
+    int i, j, v, fullscale;
+    int16_t *q = (int16_t*)m_temp_frame->data[0];
+
+    for (j = 0; j < m_temp_frame->nb_samples; j ++)
+    {
+        switch (+mode)
+        {
+            case +DefaultSourceModes::silence:
+                v = 0;
+                break;
+            case +DefaultSourceModes::white_noise:
+            /*fullscale = 5000 gives quiet white noise*/
+                fullscale=500;
+                v = (static_cast<float>(std::rand())/RAND_MAX -0.5)*fullscale;
+                break;
+            default:
+                v = 0;
+                break;
+        }
+        
+        for (i = 0; i < m_temp_frame->ch_layout.nb_channels; i ++)
+        {
+            *q++ = v;
+        }
+    }
+
+    /*resample to achieve the output sample format and channel configuration*/
+
+    m_ret = av_frame_make_writable(m_frame);
+    /*since not changing the sample rate the number of samples shouldn't change*/
+    m_ret = swr_convert(m_swr_ctx, m_frame->data, m_temp_frame->nb_samples,
+                        (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
+
+    if (m_ret < 0)
+    {
+        printf("error resampling frame: %s\n", av_error_to_string(m_ret));
+        cleanup();
+        exit(1);
+    }
+
+    switch(+timing)
+    {   
+        case +SourceTimingModes::realtime:
+            /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
+            m_sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
+            /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
+            m_end_time = std::clock();
+            /*put the thread to sleep for the calculated amount of time*/
+            nanosleep(&m_sleep_time, NULL);
+            break;
+        case +SourceTimingModes::freetime:
+            m_end_time = std::clock();
+            break;
+
+        default:
+            m_end_time = std::clock();
+            break;
+    }
+
     
+
+
+
+    return true;
+}
+
+bool DefaultInputStream::get_one_output_frame(SourceTimingModes timing)
+{
+    DefaultSourceModes default_source_mode = DefaultSourceModes::white_noise;
+
+    DefaultInputStream::get_one_output_frame(default_source_mode, timing);
 }

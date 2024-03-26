@@ -11,23 +11,39 @@ extern "C"{
 #include<libavutil/audio_fifo.h>
 } 
 
-#include<queue>
 #include<iostream>
-#include<time.h>
 #include<ctime>
 #include<chrono>
 #include<cmath>
+#include<cstdlib>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
+
+enum class DefaultSourceModes {silence, white_noise};
+
+/*overload the unary + operator to cast the enum class DefaultSourceModes to int for e.g. switch statements*/
+constexpr auto operator+(DefaultSourceModes m) noexcept
+{
+    return static_cast<std::underlying_type_t<DefaultSourceModes>>(m);
+}
+
+enum class SourceTimingModes {realtime, freetime};
+
+/*overload the unary + operator to cast the enum class SourceTimingModes to int for e.g. switch statements*/
+constexpr auto operator+(SourceTimingModes m) noexcept
+{
+    return static_cast<std::underlying_type_t<SourceTimingModes>>(m);
+}
 
 
 char* av_error_to_string(int error_code);
 
 struct timespec get_timespec_from_ticks(int ticks);
 
-class InputStream 
+
+class InputStream
 {
     private:
         const char* m_source_url = NULL;
@@ -50,10 +66,11 @@ class InputStream
         int m_number_buffered_samples = 0;
         time_t m_ticks_per_frame {};
         time_t m_end_time {};
+        struct timespec m_sleep_time {};
 
     public:
         /*normal constructor*/
-        InputStream(const char* source_url, AVCodecContext* output_codec_ctx);
+        InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options);
         
         /*destructor*/
         ~InputStream();
@@ -62,16 +79,16 @@ class InputStream
         void cleanup();
 
         /*get one frame of raw audio from the input resource*/
-        int decode_one_input_frame();
+        int decode_one_input_frame_recursive();
 
-        int decode_one_input_frame_realtime();
+        int decode_one_input_frame(SourceTimingModes timing);
 
         /*convert the sample format, sample rate and channel layout of the input frame to 
         those which the output encoder requires. NOTE the resulting frame will most likely 
         not contain the correct number of samples for the output encoder*/
         int resample_one_input_frame();
 
-        bool get_one_output_frame();
+        bool get_one_output_frame(SourceTimingModes timing);
 
         void unref_frame();
 
@@ -91,6 +108,9 @@ class DefaultInputStream
     struct SwrContext* m_swr_ctx;
     int m_ret{};
     int m_output_data_size;
+    time_t m_ticks_per_frame;
+    time_t m_end_time;
+    struct timespec m_sleep_time {};
 
     public:
     /*constructor*/
@@ -100,7 +120,11 @@ class DefaultInputStream
 
     void cleanup();
 
-    bool get_one_output_frame();
+    bool get_one_output_frame(DefaultSourceModes mode, SourceTimingModes timing);
+
+    bool get_one_output_frame(SourceTimingModes timing);
+
+    AVFrame* get_frame() const {return m_frame;}
 
 };
 
@@ -144,5 +168,7 @@ class OutputStream
 
     
 };
+
+
 
 #endif

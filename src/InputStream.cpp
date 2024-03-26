@@ -3,7 +3,7 @@
 
 
 /*normal constructor*/
-InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx)
+InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options)
 {
     m_source_url = source_url;
     m_output_codec_ctx = output_codec_ctx;
@@ -11,7 +11,7 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
     
     /*open input file and deduce the right format context from the file*/
     
-    if (avformat_open_input(&m_format_ctx, m_source_url, NULL, NULL) < 0)
+    if (avformat_open_input(&m_format_ctx, m_source_url, NULL, &options) < 0)
     {
         fprintf(stderr, "Couldn't open source file %s\n", m_source_url);
         std::exit(1);
@@ -94,10 +94,11 @@ void InputStream::cleanup()
     avformat_close_input(&m_format_ctx);
     av_packet_free(&m_pkt);   
     av_frame_free(&m_frame);
+    av_frame_free(&m_temp_frame);
     swr_free(&m_swr_ctx);
 }
 
-int InputStream::decode_one_input_frame()
+int InputStream::decode_one_input_frame_recursive()
 {
     if (!m_got_frame)
     {
@@ -135,7 +136,7 @@ int InputStream::decode_one_input_frame()
                 m_got_frame = false;
                 //get the next packet
                 av_packet_unref (m_pkt);
-                return decode_one_input_frame();
+                return decode_one_input_frame_recursive();
             }
 
             printf("Error during decoding\n");
@@ -151,21 +152,33 @@ int InputStream::decode_one_input_frame()
    return m_ret;
 }
 
-int InputStream::decode_one_input_frame_realtime()
+int InputStream::decode_one_input_frame(SourceTimingModes timing)
 {
     
-    if ((m_ret = decode_one_input_frame()) < 0) 
+    if ((m_ret = decode_one_input_frame_recursive()) < 0) 
     {
         return m_ret;
     }
-    /*work out how much audio is in the frame in units of clock ticks*/
-    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
-    /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
-    struct timespec sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
-    /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
-    m_end_time = std::clock();
-    /*put the thread to sleep for the calculated amount of time*/
-    nanosleep(&sleep_time, NULL);
+    switch(+timing)
+    {   
+        case +SourceTimingModes::realtime:
+            /*work out how much audio is in the frame in units of clock ticks*/
+            m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
+            /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
+            m_sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
+            /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
+            m_end_time = std::clock();
+            /*put the thread to sleep for the calculated amount of time*/
+            nanosleep(&m_sleep_time, NULL);
+            break;
+        case +SourceTimingModes::freetime:
+            m_end_time = std::clock();
+            break;
+
+        default:
+            m_end_time = std::clock();
+            break;
+    }
     return 0;
 }
 
@@ -194,7 +207,7 @@ int InputStream::resample_one_input_frame()
 }
 
 /*decodes and resamples enough data from the input to produce exactly one output sized frame*/
-bool InputStream::get_one_output_frame()
+bool InputStream::get_one_output_frame(SourceTimingModes timing)
 {
     
     /*if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
@@ -207,7 +220,8 @@ bool InputStream::get_one_output_frame()
     /*ensure the queue is long enough to contain 1 more input frame than required*/
     if(av_audio_fifo_realloc(m_queue, m_output_frame_size+m_frame->nb_samples) < 0)
     {
-        fprintf(stderr, "could not reallocate FIFO");
+        fprintf(stderr, "could not reallocate FIFO\n");
+        throw "could not reallocate FIFO";
         return false;
     }
 
@@ -215,11 +229,20 @@ bool InputStream::get_one_output_frame()
     /*buffer up enough samples to create one output sized frame*/
     while(m_number_buffered_samples < m_output_frame_size)
     {
-        if (decode_one_input_frame_realtime() < 0) return false;
-        if (resample_one_input_frame() < 0) return false;
+        if (decode_one_input_frame(timing) < 0) 
+        {
+            throw "could not decode an input frame";
+            return false;
+        }    
+        if (resample_one_input_frame() < 0)
+        {
+            throw "could not resample the input frame";
+            return false;
+        } 
         if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples)< m_frame->nb_samples)
         {
             fprintf(stderr, "could not write data to FIFO\n");
+            throw "could not write data to FIFO";
             return false;
         }
         m_number_buffered_samples = av_audio_fifo_size(m_queue);
@@ -233,6 +256,7 @@ bool InputStream::get_one_output_frame()
     {
         fprintf(stderr, "Could not read data from FIFO\n");
         av_frame_free(&m_frame);
+        throw "Could not read data from FIFO";
         return false;
     }
 
