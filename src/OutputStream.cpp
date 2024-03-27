@@ -9,9 +9,11 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     
     m_destination_url = destination_url;
     m_output_options = output_options;
+    m_output_format = av_guess_format(av_dict_get(output_options, "f", NULL, 0)->value, 
+                                        m_destination_url, av_dict_get(output_options, "content_type", NULL, 0)->value);
 
     /* allocate the output media context , guesses format based on filename*/
-    avformat_alloc_output_context2(&m_output_format_context, NULL, NULL, m_destination_url);
+    avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url);
     if (!m_output_format_context) 
     {
         /* defaults to mpeg*/

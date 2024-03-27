@@ -34,6 +34,7 @@ extern "C"{
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
+#define DEFAULT_TIMING_OFFSET 1000
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -148,7 +149,7 @@ class OutputStream
     private:
         const char* m_destination_url = NULL;
         AVFormatContext* m_output_format_context = NULL;
-        const AVOutputFormat* m_output_format; 
+        const AVOutputFormat* m_output_format = NULL; 
         AVCodecContext* m_output_codec_context = NULL;
         const AVCodec* m_output_codec = NULL;
         AVStream* m_audio_stream = NULL;

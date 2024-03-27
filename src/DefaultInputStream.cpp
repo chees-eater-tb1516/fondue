@@ -97,8 +97,9 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
         throw "Default input: failed to calculate data size";
     }
 
-    /*work out how much audio is in the frame in units of clock ticks*/
-    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
+    /*work out how much audio is in the frame in units of clock ticks and subtracts a little bit
+    * to ensure the loop always runs slightly too fast (too slow leads to dropouts)*/
+    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate - DEFAULT_TIMING_OFFSET;
 
 
 

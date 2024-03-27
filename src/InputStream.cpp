@@ -163,8 +163,9 @@ int InputStream::decode_one_input_frame(SourceTimingModes timing)
     switch(+timing)
     {   
         case +SourceTimingModes::realtime:
-            /*work out how much audio is in the frame in units of clock ticks*/
-            m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate;
+            /*work out how much audio is in the frame in units of clock ticks and subtracts a little bit to ensure
+            * the loop is always slightly faster than required (too slow leads to dropouts)*/
+            m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate - DEFAULT_TIMING_OFFSET;
             /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
             m_sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
             /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
