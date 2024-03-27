@@ -6,12 +6,13 @@ int main ()
     AVDictionary* input_options = NULL;
     /*options pertaining to the output, generally corresponds to the parts of the ffmpeg output prompt*/
     AVDictionary* output_options = NULL;
-    av_dict_set(&output_options, "c:a", "libmp3lame", 0);
-    av_dict_set(&output_options, "f", "mp3", 0);
-    av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
+    /*hard coded icecast options, uncomment if rqd*/
+    //av_dict_set(&output_options, "c:a", "libmp3lame", 0);
+    //av_dict_set(&output_options, "f", "mp3", 0);
+    //av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
     
-    OutputStream test_output("icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
-    InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/Durufle requiem.mp3", test_output.get_output_codec_context(), input_options);
+    OutputStream test_output("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
+    InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3", test_output.get_output_codec_context(), input_options);
     DefaultInputStream default_input(test_output.get_output_codec_context());
     
     InputStream* source = &test_input;

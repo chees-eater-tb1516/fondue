@@ -35,6 +35,7 @@ extern "C"{
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_TIMING_OFFSET 1000
+#define RADIO_URL "icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"
 
 enum class DefaultSourceModes {silence, white_noise};
 

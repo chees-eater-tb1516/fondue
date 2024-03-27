@@ -9,8 +9,15 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     
     m_destination_url = destination_url;
     m_output_options = output_options;
-    m_output_format = av_guess_format(av_dict_get(output_options, "f", NULL, 0)->value, 
-                                        m_destination_url, av_dict_get(output_options, "content_type", NULL, 0)->value);
+    /*some annoying code to avoid dereferencing a null pointer, surely there is a better way*/
+    AVDictionaryEntry* format = av_dict_get(m_output_options, "f", NULL, 0);
+    AVDictionaryEntry* content_type = av_dict_get(m_output_options, "content_type", NULL, 0);
+    /*if the pointer is NULL, do not dereference, set string to NULL instead*/
+    const char* format_s = format ? format->value : NULL;
+    const char* content_type_s = content_type ? content_type->value : NULL;
+    /*work out the output format from the details passed in: short name, url and mime type*/
+    m_output_format = av_guess_format(format_s, 
+                                        m_destination_url, content_type_s);
 
     /* allocate the output media context , guesses format based on filename*/
     avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url);
@@ -25,10 +32,7 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
         cleanup();
         exit(1);
     }
-        
 
-    /*assign things to the output format from the output format context*/
-    m_output_format = m_output_format_context->oformat;
 
     /* Add the audio stream using the default format codecs 
         and initialize the codecs. */
@@ -99,8 +103,8 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     }
 
     /* Now that all the parameters are set, we can open the audio 
-        codecs and allocate the necessary encode buffers. Also open the thing that deals with resampling
-        the input to suit the output*/
+      *  codecs and allocate the necessary encode buffers. Also open the thing that deals with resampling
+        * the input to suit the output*/
 
     /* copy the options into a temp dictionary*/
     AVDictionary* opt = NULL;
