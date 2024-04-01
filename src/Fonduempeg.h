@@ -36,6 +36,7 @@ extern "C"{
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_TIMING_OFFSET 1000
 #define RADIO_URL "icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"
+#define DEFAULT_FADE_MS 2000
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -52,6 +53,12 @@ constexpr auto operator+(SourceTimingModes m) noexcept
 {
     return static_cast<std::underlying_type_t<SourceTimingModes>>(m);
 }
+
+struct ControlFlags
+{
+    bool stop {false};
+    bool normal_streaming {true};
+};
 
 
 char* av_error_to_string(int error_code);
@@ -113,6 +120,9 @@ class InputStream
         int open_codec_context(enum AVMediaType type);
 
         AVFrame* alloc_frame(AVCodecContext* codec_context);
+
+        bool crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing);
+
     
 };
 
@@ -179,6 +189,8 @@ class OutputStream
         int write_frame ();
 
         void finish_streaming ();
+
+        int get_frame_length_milliseconds();
 
 
 

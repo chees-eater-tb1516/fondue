@@ -259,3 +259,10 @@ void OutputStream::finish_streaming()
     avformat_free_context(m_output_format_context);
 
 }
+
+int OutputStream::get_frame_length_milliseconds()
+{
+    int rate = m_frame->sample_rate;
+    int number = m_frame->nb_samples;
+    return number/(rate/1000);
+}
