@@ -48,16 +48,17 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
                         OutputStream& sink, DefaultInputStream& default_input, ControlFlags* flags, SourceTimingModes& timing_mode)
 {
     int fade_time_remaining = DEFAULT_FADE_MS;
+    const int fade_time = DEFAULT_FADE_MS;
     source->init_crossfade();
     new_input->init_crossfade();
 
     while (fade_time_remaining > 0 && !flags->stop)
     {
-        /*attempt to decode both input and new input frames*/
+        /*attempt to decode both input and new input frames and crossfade together*/
         try
         {
-            new_input->decode_one_input_frame(SourceTimingModes::freetime);
-            source->crossfade_frame (new_input->get_frame(), timing_mode);
+            new_input->get_one_output_frame(SourceTimingModes::freetime);
+            source->crossfade_frame (new_input->get_frame(), timing_mode, fade_time_remaining, fade_time);
         }
 
         /*if either fail*/
@@ -69,7 +70,6 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
         
         sink.set_frame(source->get_frame());
         sink.write_frame();
-        fade_time_remaining -= sink.get_frame_length_milliseconds();
 
     }
     new_input->end_crossfade();
@@ -90,14 +90,14 @@ int main ()
     //av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
     
     OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
-    InputStream test_input("/home/tb1516/fondue/audio_sources/main_theme.mp3", sink.get_output_codec_context(), input_options);
-    InputStream test_input_2("/home/tb1516/fondue/audio_sources/main_theme.mp3", sink.get_output_codec_context(), input_options);
+    InputStream test_input("/home/tb1516/fondue/audio_sources/new_main_theme.wav", sink.get_output_codec_context(), input_options);
+    InputStream test_input_2("/home/tb1516/fondue/audio_sources/new_alt_theme.wav", sink.get_output_codec_context(), input_options);
     DefaultInputStream default_input(sink.get_output_codec_context());
     ControlFlags flags;
     InputStream* source = &test_input;
     InputStream* new_source = &test_input_2;
-    SourceTimingModes timing_mode = SourceTimingModes::realtime;
-    
+    SourceTimingModes timing_mode = SourceTimingModes::freetime;
+    flags.normal_streaming=false;
     
     while (!flags.stop)
     {
@@ -105,6 +105,7 @@ int main ()
             continue_streaming(source, sink, default_input, &flags, timing_mode);
         else   
             source = crossfade(source, new_source, sink, default_input, &flags, timing_mode);
+            flags.normal_streaming = true;
     }    
     sink.finish_streaming();
 

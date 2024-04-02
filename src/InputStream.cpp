@@ -167,7 +167,7 @@ int InputStream::decode_one_input_frame(SourceTimingModes timing)
     }
     return 0;
 }
-
+/*converts sample format, sample rate and channel layout to make the input data conform to the output requirements*/
 int InputStream::resample_one_input_frame()
 {
     
@@ -187,6 +187,16 @@ int InputStream::resample_one_input_frame()
     m_actual_nb_samples = m_ret;
     m_frame->nb_samples=m_ret;
     av_frame_unref(m_temp_frame);
+    return m_ret;
+}
+/*overload for resampling after crossfading note CANNOT handle sample rate changes*/
+int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
+{
+    
+    m_ret=swr_convert(swr_ctx, m_frame->data, m_frame->nb_samples, 
+                        (const uint8_t **)m_frame->data, m_frame->nb_samples);
+    
+   
     return m_ret;
 }
 
@@ -251,11 +261,6 @@ bool InputStream::get_one_output_frame(SourceTimingModes timing)
 }
 
 
-
-void InputStream::unref_frame()
-{
-    av_frame_unref(m_frame);
-}
 
 int InputStream::open_codec_context(enum AVMediaType type)
 {
@@ -331,11 +336,33 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
  
     return frame;
 }
-/*PROTOTYPE does not currently crossfade, just returns original source frames*/
-bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing_mode)
+/*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
+bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing_mode, int& fade_time_remaining, int fade_time)
 {
+    int i , j; 
+    float *q , *v;
     get_one_output_frame(timing_mode);
 
+    /*a value between zero and one representing how far through the fade we are currently*/
+    float non_dimensional_fade_time = 1 - static_cast<float>(fade_time_remaining)/fade_time;
+
+    float non_dimensional_fade_time_increment = 1 / (static_cast<float>(new_input_frame->sample_rate/1000)*fade_time);
+
+    for (i = 0; i < m_frame->ch_layout.nb_channels; i++)
+    {
+        q = (float*)m_frame->data[i];
+        v = (float*)new_input_frame->data[i];
+
+        for (j = 0; j < m_frame->nb_samples; j++)
+        {
+            *q = *q *(1-non_dimensional_fade_time) + *v * non_dimensional_fade_time; 
+            q++;
+            v++;
+        }
+    }
+
+    resample_one_input_frame(m_swr_ctx_xfade); 
+    fade_time_remaining -= get_frame_length_milliseconds();
     return true;
     
 }
@@ -343,11 +370,22 @@ bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes ti
 void InputStream::init_crossfade()
 {
     set_resampler_options(m_swr_ctx);
+    /* initialize the resampling context */
+    /*if ((swr_init(m_swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "crossfading: failed to initialise the resampler context";
+    }*/
 }
 
 void InputStream::end_crossfade()
 {
     set_resampler_options(m_swr_ctx, m_output_codec_ctx);
+    /*if ((swr_init(m_swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "end crossfading: failed to initialise the resampler context";
+    }*/
 }
 /*set resampling options for both input and output of resampler*/
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
@@ -364,7 +402,7 @@ void InputStream::set_resampler_options(SwrContext* swr_ctx)
 {
     AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
     av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &default_channel_layout,      0);
-    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     AV_SAMPLE_FMT_S16P,     0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     AV_SAMPLE_FMT_FLTP,     0);
 }
 /*set resampling output options*/
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx)
@@ -392,7 +430,7 @@ struct SwrContext* InputStream::alloc_resampler (AVCodecContext* input_codec_ctx
     if ((swr_init(swr_ctx)) < 0) 
     {
         cleanup();
-        throw "Input: failed to initialise the resampler contexr";
+        throw "Input: failed to initialise the resampler context";
     }
 
     return swr_ctx;
@@ -412,7 +450,7 @@ struct SwrContext* InputStream::alloc_resampler (AVCodecContext* output_codec_ct
     AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
     av_opt_set_chlayout  (swr_ctx, "in_chlayout",       &default_channel_layout,      0);
     av_opt_set_int       (swr_ctx, "in_sample_rate",     output_codec_ctx->sample_rate,    0);
-    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16P,     0);
+    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_FLTP,     0);
     
     set_resampler_options(swr_ctx, output_codec_ctx);
     
@@ -426,6 +464,13 @@ struct SwrContext* InputStream::alloc_resampler (AVCodecContext* output_codec_ct
 
     return swr_ctx;
 
+}
+
+int InputStream::get_frame_length_milliseconds()
+{
+    int rate = m_frame->sample_rate;
+    int number = m_frame->nb_samples;
+    return number/(rate/1000);
 }
 
 

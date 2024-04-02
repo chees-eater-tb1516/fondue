@@ -37,7 +37,7 @@ extern "C"{
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_TIMING_OFFSET 1000
 #define RADIO_URL "icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"
-#define DEFAULT_FADE_MS 2000
+#define DEFAULT_FADE_MS 10000
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -115,6 +115,8 @@ class InputStream
         not contain the correct number of samples for the output encoder*/
         int resample_one_input_frame();
 
+        int resample_one_input_frame(SwrContext* swr_ctx);
+
         bool get_one_output_frame(SourceTimingModes timing);
 
         void unref_frame();
@@ -141,7 +143,9 @@ class InputStream
         /*return resamplers to normal streaming settings*/
         void end_crossfade();
 
-        bool crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing);
+        bool crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing, int& fade_time_remaining, int fade_time);
+
+        int get_frame_length_milliseconds();
 
     
 };
