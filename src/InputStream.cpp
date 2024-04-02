@@ -48,29 +48,11 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
     }
 
 
-    //printf("Demuxing audio from URL '%s'\n", m_source_url); 
+        /* create resampling contexts */
+    m_swr_ctx = alloc_resampler(m_input_codec_ctx, m_output_codec_ctx);
 
-        /* create resampler context */
-    m_swr_ctx = swr_alloc();
-    if (!m_swr_ctx) {
-        cleanup();
-        throw "Input: could not allocate a resampler context";
-        
-    }
- 
-    /* set options */
-    av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &m_input_codec_ctx->ch_layout,      0);
-    av_opt_set_int       (m_swr_ctx, "in_sample_rate",     m_input_codec_ctx->sample_rate,    0);
-    av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      m_input_codec_ctx->sample_fmt,     0);
-    av_opt_set_chlayout  (m_swr_ctx, "out_chlayout",      &m_output_codec_ctx->ch_layout,      0);
-    av_opt_set_int       (m_swr_ctx, "out_sample_rate",    m_output_codec_ctx->sample_rate,    0);
-    av_opt_set_sample_fmt(m_swr_ctx, "out_sample_fmt",     m_output_codec_ctx->sample_fmt,     0);
- 
-    /* initialize the resampling context */
-    if ((swr_init(m_swr_ctx)) < 0) {
-        cleanup();
-        throw "Input: failed to initialise the resampler contexr";
-    }
+    m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
+    
 
         /* Create the FIFO buffer based on the specified output sample format. */
     if (!(m_queue = av_audio_fifo_alloc(m_output_codec_ctx->sample_fmt,
@@ -79,6 +61,8 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         cleanup();
         throw "Input: failed to allocate audio samples queue";
     }
+
+
 
 }
 
@@ -347,7 +331,7 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
  
     return frame;
 }
-
+/*PROTOTYPE does not currently crossfade, just returns original source frames*/
 bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing_mode)
 {
     get_one_output_frame(timing_mode);
@@ -355,6 +339,100 @@ bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes ti
     return true;
     
 }
+
+void InputStream::init_crossfade()
+{
+    set_resampler_options(m_swr_ctx);
+}
+
+void InputStream::end_crossfade()
+{
+    set_resampler_options(m_swr_ctx, m_output_codec_ctx);
+}
+/*set resampling options for both input and output of resampler*/
+void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
+{
+    av_opt_set_chlayout  (swr_ctx, "in_chlayout",       &input_codec_ctx->ch_layout,      0);
+    av_opt_set_int       (swr_ctx, "in_sample_rate",     input_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt",      input_codec_ctx->sample_fmt,     0);
+    av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &output_codec_ctx->ch_layout,      0);
+    av_opt_set_int       (swr_ctx, "out_sample_rate",    output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     output_codec_ctx->sample_fmt,     0);
+}
+/*set resampling output options to defaults*/
+void InputStream::set_resampler_options(SwrContext* swr_ctx)
+{
+    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
+    av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &default_channel_layout,      0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     AV_SAMPLE_FMT_S16P,     0);
+}
+/*set resampling output options*/
+void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx)
+{
+    av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &output_codec_ctx->ch_layout,      0);
+    av_opt_set_int       (swr_ctx, "out_sample_rate",    output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     output_codec_ctx->sample_fmt,     0);
+}
+
+/*allocate a resampling context with specified input and output settings*/
+struct SwrContext* InputStream::alloc_resampler (AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
+{
+    /*create the resampling context*/
+    struct SwrContext* swr_ctx = swr_alloc();
+    if (!swr_ctx) {
+        cleanup();
+        throw "Input: could not allocate a resampler context";
+        
+    }
+
+    
+    set_resampler_options(swr_ctx, input_codec_ctx, output_codec_ctx);
+
+    /* initialize the resampling context */
+    if ((swr_init(swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "Input: failed to initialise the resampler contexr";
+    }
+
+    return swr_ctx;
+
+}
+/*allocate a resampling context with default input settings*/
+struct SwrContext* InputStream::alloc_resampler (AVCodecContext* output_codec_ctx)
+{
+    /*create the resampling context*/
+    struct SwrContext* swr_ctx = swr_alloc();
+    if (!swr_ctx) {
+        cleanup();
+        throw "Input: could not allocate a resampler context";
+        
+    }
+
+    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
+    av_opt_set_chlayout  (swr_ctx, "in_chlayout",       &default_channel_layout,      0);
+    av_opt_set_int       (swr_ctx, "in_sample_rate",     output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16P,     0);
+    
+    set_resampler_options(swr_ctx, output_codec_ctx);
+    
+
+    /* initialize the resampling context */
+    if ((swr_init(swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "Input: failed to initialise the resampler context";
+    }
+
+    return swr_ctx;
+
+}
+
+
+
+
+
+
 
 
 

@@ -23,6 +23,7 @@ extern "C"{
 #include <libavutil/error.h>
 #include <libavutil/avassert.h>
 #include<libavutil/audio_fifo.h>
+#include<libavfilter/avfilter.h>
 } 
 
 #include<iostream>
@@ -81,6 +82,7 @@ class InputStream
         bool m_got_frame = false;
         int m_ret{};
         struct SwrContext* m_swr_ctx;
+        struct SwrContext* m_swr_ctx_xfade;
         int m_dst_nb_samples;
         int m_default_frame_size;
         int m_output_frame_size;
@@ -90,6 +92,8 @@ class InputStream
         time_t m_ticks_per_frame {};
         time_t m_end_time {};
         struct timespec m_sleep_time {};
+        
+
 
     public:
         /*normal constructor*/
@@ -120,6 +124,22 @@ class InputStream
         int open_codec_context(enum AVMediaType type);
 
         AVFrame* alloc_frame(AVCodecContext* codec_context);
+
+        struct SwrContext* alloc_resampler (AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx);
+
+        struct SwrContext* alloc_resampler(AVCodecContext* input_codec_ctx);
+
+        void set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx);
+
+        void set_resampler_options(SwrContext* swr_ctx);
+
+        void set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx);
+
+        /*configure resamplers for crossfading*/
+        void init_crossfade();
+
+        /*return resamplers to normal streaming settings*/
+        void end_crossfade();
 
         bool crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing);
 

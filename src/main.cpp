@@ -48,6 +48,8 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
                         OutputStream& sink, DefaultInputStream& default_input, ControlFlags* flags, SourceTimingModes& timing_mode)
 {
     int fade_time_remaining = DEFAULT_FADE_MS;
+    source->init_crossfade();
+    new_input->init_crossfade();
 
     while (fade_time_remaining > 0 && !flags->stop)
     {
@@ -70,6 +72,7 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
         fade_time_remaining -= sink.get_frame_length_milliseconds();
 
     }
+    new_input->end_crossfade();
     return new_input;
 }
 
