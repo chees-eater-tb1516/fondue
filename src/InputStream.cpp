@@ -351,6 +351,8 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
 bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing_mode)
 {
     get_one_output_frame(timing_mode);
+
+    return true;
     
 }
 
