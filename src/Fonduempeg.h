@@ -31,6 +31,7 @@ extern "C"{
 #include<chrono>
 #include<cmath>
 #include<cstdlib>
+#include<thread>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
@@ -66,6 +67,7 @@ char* av_error_to_string(int error_code);
 
 struct timespec get_timespec_from_ticks(int ticks);
 
+void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, SourceTimingModes timing_mode);
 
 class InputStream
 {
@@ -89,15 +91,14 @@ class InputStream
         int m_actual_nb_samples;
         AVAudioFifo* m_queue = NULL;
         int m_number_buffered_samples = 0;
-        time_t m_ticks_per_frame {};
-        time_t m_end_time {};
-        struct timespec m_sleep_time {};
+        std::chrono::duration<double> m_loop_duration {};
+        SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
         
 
 
     public:
         /*normal constructor*/
-        InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options);
+        InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode);
         
         /*destructor*/
         ~InputStream();
@@ -108,8 +109,6 @@ class InputStream
         /*get one frame of raw audio from the input resource*/
         int decode_one_input_frame_recursive();
 
-        int decode_one_input_frame(SourceTimingModes timing);
-
         /*convert the sample format, sample rate and channel layout of the input frame to 
         those which the output encoder requires. NOTE the resulting frame will most likely 
         not contain the correct number of samples for the output encoder*/
@@ -117,7 +116,7 @@ class InputStream
 
         int resample_one_input_frame(SwrContext* swr_ctx);
 
-        bool get_one_output_frame(SourceTimingModes timing);
+        bool get_one_output_frame();
 
         void unref_frame();
 
@@ -143,9 +142,11 @@ class InputStream
         /*return resamplers to normal streaming settings*/
         void end_crossfade();
 
-        bool crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing, int& fade_time_remaining, int fade_time);
+        bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
 
         int get_frame_length_milliseconds();
+
+        void sleep(std::chrono::_V2::steady_clock::time_point &end_time);
 
     
 };
@@ -158,23 +159,24 @@ class DefaultInputStream
     struct SwrContext* m_swr_ctx;
     int m_ret{};
     int m_output_data_size;
-    time_t m_ticks_per_frame;
-    time_t m_end_time;
-    struct timespec m_sleep_time {};
+    std::chrono::duration<double> m_loop_duration {};
+    SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
 
     public:
     /*constructor*/
-    DefaultInputStream(AVCodecContext* output_codec_ctx);
+    DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode);
     /*destructor*/
     ~DefaultInputStream();
 
     void cleanup();
 
-    bool get_one_output_frame(DefaultSourceModes mode, SourceTimingModes timing);
+    bool get_one_output_frame(DefaultSourceModes mode);
 
-    bool get_one_output_frame(SourceTimingModes timing);
+    bool get_one_output_frame();
 
     AVFrame* get_frame() const {return m_frame;}
+
+    void sleep(std::chrono::_V2::steady_clock::time_point &end_time);
 
 };
 

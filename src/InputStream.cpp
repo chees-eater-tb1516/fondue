@@ -3,11 +3,12 @@
 
 
 /*normal constructor*/
-InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options)
+InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode)
 {
     m_source_url = source_url;
     m_output_codec_ctx = output_codec_ctx;
     m_default_frame_size = DEFAULT_FRAME_SIZE;
+    m_timing_mode = timing_mode;
     
     /*open input file and deduce the right format context from the file*/
     
@@ -61,6 +62,9 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
         cleanup();
         throw "Input: failed to allocate audio samples queue";
     }
+
+    std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx->sample_rate);
+    m_loop_duration = (m_output_frame_size-1) * sample_duration;
 
 
 
@@ -137,36 +141,7 @@ int InputStream::decode_one_input_frame_recursive()
    return m_ret;
 }
 
-int InputStream::decode_one_input_frame(SourceTimingModes timing)
-{
-    
-    if ((m_ret = decode_one_input_frame_recursive()) < 0) 
-    {
-        return m_ret;
-    }
-    switch(+timing)
-    {   
-        case +SourceTimingModes::realtime:
-            /*work out how much audio is in the frame in units of clock ticks and subtracts a little bit to ensure
-            * the loop is always slightly faster than required (too slow leads to dropouts)*/
-            m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate - DEFAULT_TIMING_OFFSET;
-            /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
-            m_sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
-            /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
-            m_end_time = std::clock();
-            /*put the thread to sleep for the calculated amount of time*/
-            nanosleep(&m_sleep_time, NULL);
-            break;
-        case +SourceTimingModes::freetime:
-            m_end_time = std::clock();
-            break;
 
-        default:
-            m_end_time = std::clock();
-            break;
-    }
-    return 0;
-}
 /*converts sample format, sample rate and channel layout to make the input data conform to the output requirements*/
 int InputStream::resample_one_input_frame()
 {
@@ -201,7 +176,7 @@ int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
 }
 
 /*decodes and resamples enough data from the input to produce exactly one output sized frame*/
-bool InputStream::get_one_output_frame(SourceTimingModes timing)
+bool InputStream::get_one_output_frame()
 {
     
     /*if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
@@ -223,7 +198,7 @@ bool InputStream::get_one_output_frame(SourceTimingModes timing)
     /*buffer up enough samples to create one output sized frame*/
     while(m_number_buffered_samples < m_output_frame_size)
     {
-        if (decode_one_input_frame(timing) < 0) 
+        if (decode_one_input_frame_recursive() < 0) 
         {
             throw "could not decode an input frame";
             return false;
@@ -337,11 +312,11 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
     return frame;
 }
 /*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
-bool InputStream::crossfade_frame(AVFrame* new_input_frame, SourceTimingModes timing_mode, int& fade_time_remaining, int fade_time)
+bool InputStream::crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time)
 {
     int i , j; 
     float *q , *v;
-    get_one_output_frame(timing_mode);
+    get_one_output_frame();
 
     /*a value between zero and one representing how far through the fade we are currently*/
     float non_dimensional_fade_time = 1 - static_cast<float>(fade_time_remaining)/fade_time;
@@ -371,21 +346,21 @@ void InputStream::init_crossfade()
 {
     set_resampler_options(m_swr_ctx);
     /* initialize the resampling context */
-    /*if ((swr_init(m_swr_ctx)) < 0) 
+    if ((swr_init(m_swr_ctx)) < 0) 
     {
         cleanup();
         throw "crossfading: failed to initialise the resampler context";
-    }*/
+    }
 }
 
 void InputStream::end_crossfade()
 {
     set_resampler_options(m_swr_ctx, m_output_codec_ctx);
-    /*if ((swr_init(m_swr_ctx)) < 0) 
+    if ((swr_init(m_swr_ctx)) < 0) 
     {
         cleanup();
         throw "end crossfading: failed to initialise the resampler context";
-    }*/
+    }
 }
 /*set resampling options for both input and output of resampler*/
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
@@ -473,6 +448,10 @@ int InputStream::get_frame_length_milliseconds()
     return number/(rate/1000);
 }
 
+void InputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time)
+{
+    fondue_sleep(end_time, m_loop_duration, m_timing_mode);
+}
 
 
 

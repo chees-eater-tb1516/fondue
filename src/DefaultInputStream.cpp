@@ -1,9 +1,10 @@
 #include"Fonduempeg.h"
 
 /*normal constructor, does most of the FFMpeg boilerplate stuff*/
-DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
+DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode)
 {
     m_output_codec_ctx = output_codec_ctx;
+    m_timing_mode = timing_mode;
 
     /*allocate an output frame for later use*/
 
@@ -97,9 +98,9 @@ DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx)
         throw "Default input: failed to calculate data size";
     }
 
-    /*work out how much audio is in the frame in units of clock ticks and subtracts a little bit
-    * to ensure the loop always runs slightly too fast (too slow leads to dropouts)*/
-    m_ticks_per_frame = (m_temp_frame->nb_samples * CLOCKS_PER_SEC)/m_temp_frame->sample_rate - DEFAULT_TIMING_OFFSET;
+
+    std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx->sample_rate);
+    m_loop_duration = (nb_samples - 1) * sample_duration;
 
 
 
@@ -121,7 +122,7 @@ DefaultInputStream::~DefaultInputStream()
 }
 
 
-bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode, SourceTimingModes timing)
+bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode)
 {
     int i, j, v, fullscale;
     int16_t *q = (int16_t*)m_temp_frame->data[0];
@@ -163,35 +164,17 @@ bool DefaultInputStream::get_one_output_frame(DefaultSourceModes mode, SourceTim
         throw "Default input: error resampling frame";
     }
 
-    switch(+timing)
-    {   
-        case +SourceTimingModes::realtime:
-            /*work out how much processor time has passed since the last frame was decoded and set a sleep time accordingly*/   
-            m_sleep_time = get_timespec_from_ticks(m_ticks_per_frame-(std::clock()-m_end_time));
-            /*store the time just after the frame was decoded (for the benefit of the next iteration)*/
-            m_end_time = std::clock();
-            /*put the thread to sleep for the calculated amount of time*/
-            nanosleep(&m_sleep_time, NULL);
-            break;
-        case +SourceTimingModes::freetime:
-            m_end_time = std::clock();
-            break;
-
-        default:
-            m_end_time = std::clock();
-            break;
-    }
-
-    
-
-
-
     return true;
 }
 
-bool DefaultInputStream::get_one_output_frame(SourceTimingModes timing)
+bool DefaultInputStream::get_one_output_frame()
 {
     DefaultSourceModes default_source_mode = DefaultSourceModes::white_noise;
 
-    return DefaultInputStream::get_one_output_frame(default_source_mode, timing);
+    return DefaultInputStream::get_one_output_frame(default_source_mode);
+}
+
+void DefaultInputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time)
+{
+    fondue_sleep(end_time, m_loop_duration, m_timing_mode);
 }
