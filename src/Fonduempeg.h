@@ -32,13 +32,15 @@ extern "C"{
 #include<cmath>
 #include<cstdlib>
 #include<thread>
+#include<functional>
+#include<mutex>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_TIMING_OFFSET 1000
 #define RADIO_URL "icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"
-#define DEFAULT_FADE_MS 10000
+#define DEFAULT_FADE_MS 2000
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -67,13 +69,14 @@ char* av_error_to_string(int error_code);
 
 struct timespec get_timespec_from_ticks(int ticks);
 
-void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, SourceTimingModes timing_mode);
+void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, const SourceTimingModes& timing_mode);
 
 class InputStream
 {
     private:
         const char* m_source_url = NULL;
         AVFormatContext* m_format_ctx = NULL;
+        AVDictionary* m_options;
         AVCodecContext* m_input_codec_ctx = NULL;
         /*needs reference to the output codec context in order to be 
         able to prepare output frames in the correct format*/
@@ -146,7 +149,7 @@ class InputStream
 
         int get_frame_length_milliseconds();
 
-        void sleep(std::chrono::_V2::steady_clock::time_point &end_time);
+        void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
 
     
 };
@@ -176,7 +179,7 @@ class DefaultInputStream
 
     AVFrame* get_frame() const {return m_frame;}
 
-    void sleep(std::chrono::_V2::steady_clock::time_point &end_time);
+    void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
 
 };
 
@@ -196,6 +199,7 @@ class OutputStream
         AVFrame* m_frame;
         AVPacket* m_pkt;
         AVDictionary* m_output_options = NULL;
+        int m_sample_rate, m_bit_rate;
 
 
     public: 

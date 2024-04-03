@@ -3,16 +3,18 @@
 
 
 /*normal constructor*/
-InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode)
+InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode):
+    m_source_url {source_url},
+    m_output_codec_ctx {output_codec_ctx},
+    m_options {options},
+    m_timing_mode {timing_mode}
 {
-    m_source_url = source_url;
-    m_output_codec_ctx = output_codec_ctx;
+    
     m_default_frame_size = DEFAULT_FRAME_SIZE;
-    m_timing_mode = timing_mode;
     
     /*open input file and deduce the right format context from the file*/
     
-    if (avformat_open_input(&m_format_ctx, m_source_url, NULL, &options) < 0)
+    if (avformat_open_input(&m_format_ctx, m_source_url, NULL, &m_options) < 0)
     {
         throw "Input: couldn't open source";
     }
@@ -448,7 +450,7 @@ int InputStream::get_frame_length_milliseconds()
     return number/(rate/1000);
 }
 
-void InputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time)
+void InputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time) const
 {
     fondue_sleep(end_time, m_loop_duration, m_timing_mode);
 }

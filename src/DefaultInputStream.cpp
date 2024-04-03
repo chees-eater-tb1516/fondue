@@ -1,10 +1,11 @@
 #include"Fonduempeg.h"
 
 /*normal constructor, does most of the FFMpeg boilerplate stuff*/
-DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode)
+DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode):
+    m_output_codec_ctx {output_codec_ctx},
+    m_timing_mode {timing_mode}
 {
-    m_output_codec_ctx = output_codec_ctx;
-    m_timing_mode = timing_mode;
+    
 
     /*allocate an output frame for later use*/
 
@@ -174,7 +175,7 @@ bool DefaultInputStream::get_one_output_frame()
     return DefaultInputStream::get_one_output_frame(default_source_mode);
 }
 
-void DefaultInputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time)
+void DefaultInputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time) const
 {
     fondue_sleep(end_time, m_loop_duration, m_timing_mode);
 }

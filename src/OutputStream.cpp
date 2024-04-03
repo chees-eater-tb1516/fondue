@@ -4,11 +4,13 @@
 
 /*normal constructor*/
 OutputStream::OutputStream(const char* destination_url, AVDictionary* output_options, 
-    int sample_rate, int bit_rate)
+                            int sample_rate, int bit_rate):
+
+    m_destination_url {destination_url},
+    m_output_options {output_options},
+    m_sample_rate {sample_rate},
+    m_bit_rate {bit_rate}
 {
-    
-    m_destination_url = destination_url;
-    m_output_options = output_options;
     /*some annoying code to avoid dereferencing a null pointer, surely there is a better way*/
     AVDictionaryEntry* format = av_dict_get(m_output_options, "f", NULL, 0);
     AVDictionaryEntry* content_type = av_dict_get(m_output_options, "content_type", NULL, 0);
@@ -78,15 +80,14 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
 
         m_output_codec_context->sample_fmt  =(m_output_codec)->sample_fmts ?
             (m_output_codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-        m_output_codec_context->bit_rate    = DEFAULT_BIT_RATE;
+        m_output_codec_context->bit_rate    = m_bit_rate;
         m_output_codec_context->sample_rate = DEFAULT_SAMPLE_RATE;
         if ((m_output_codec)->supported_samplerates) 
         {
-            m_output_codec_context->sample_rate = (m_output_codec)->supported_samplerates[0];
             for (i = 0; (m_output_codec)->supported_samplerates[i]; i++) 
             {
-                if ((m_output_codec)->supported_samplerates[i] == sample_rate)
-                    m_output_codec_context->sample_rate = sample_rate;
+                if ((m_output_codec)->supported_samplerates[i] == m_sample_rate)
+                    m_output_codec_context->sample_rate = m_sample_rate;
             }
         }
         AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;

@@ -24,7 +24,7 @@ struct timespec get_timespec_from_ticks(int ticks)
 
 /*calculates sleep time required and sleeps the thread accordingly, put this function at the end of the loop:
 * assumes the iteration start time is equal to the end time of the previous iteration*/
-void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, SourceTimingModes timing_mode)
+void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, const SourceTimingModes &timing_mode)
 {
     
     if (timing_mode == SourceTimingModes::realtime)
