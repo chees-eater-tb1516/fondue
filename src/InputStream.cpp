@@ -11,6 +11,8 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 {
     
     m_default_frame_size = DEFAULT_FRAME_SIZE;
+
+    avdevice_register_all();
     
     /*open input file and deduce the right format context from the file*/
     
@@ -70,6 +72,35 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
 
 
+}
+
+InputStream::InputStream(std::string prompt_url, const OutputStream &output_stream, SourceTimingModes timing_mode)
+{
+    std::string source_url;
+    AVDictionary* options = NULL;
+    /*split prompt into key-value pairs*/
+    char *key, *value;
+    key = strtok (const_cast<char*>(prompt_url.c_str()), " ");
+    value = strtok(NULL, " ");
+    while (key != NULL)
+    {   
+        /*special case for the input URL*/
+        if (strcmp(key, "-i") == 0)
+        {
+            source_url.append(value);
+            key = strtok(NULL, " ");
+            value = strtok(NULL, " ");
+            continue;
+        }
+        /*add the key-value pair to the options dictionary*/
+        av_dict_set(&options, key, value, 0);
+        key = strtok(NULL, " ");
+        value = strtok(NULL, " ");
+       
+        int x = 1;
+    }
+    /*call the normal constructor having parsed the input string*/
+    InputStream(source_url.c_str(), output_stream.get_output_codec_context(), options, timing_mode);
 }
 
 /*destructor*/

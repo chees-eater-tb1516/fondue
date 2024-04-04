@@ -24,6 +24,7 @@ extern "C"{
 #include <libavutil/avassert.h>
 #include<libavutil/audio_fifo.h>
 #include<libavfilter/avfilter.h>
+#include<libavdevice/avdevice.h>
 } 
 
 #include<iostream>
@@ -34,6 +35,7 @@ extern "C"{
 #include<thread>
 #include<functional>
 #include<mutex>
+#include<cstring>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
@@ -71,6 +73,49 @@ struct timespec get_timespec_from_ticks(int ticks);
 
 void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, const SourceTimingModes& timing_mode);
 
+class OutputStream
+{
+    private:
+        const char* m_destination_url = NULL;
+        AVFormatContext* m_output_format_context = NULL;
+        const AVOutputFormat* m_output_format = NULL; 
+        AVCodecContext* m_output_codec_context = NULL;
+        const AVCodec* m_output_codec = NULL;
+        AVStream* m_audio_stream = NULL;
+        int m_samples_count {0};
+        int m_ret {0};
+        int m_nb_samples{0};
+        AVFrame* m_frame;
+        AVPacket* m_pkt;
+        AVDictionary* m_output_options = NULL;
+        int m_sample_rate, m_bit_rate;
+
+
+    public: 
+        /*normal constructor*/
+        OutputStream(const char* destination_url, AVDictionary* output_options, 
+            int sample_rate, int bit_rate);
+
+        /*destructor*/
+        ~OutputStream();
+
+        void cleanup ();
+
+        void set_frame(AVFrame* frame){m_frame = frame;}
+
+        AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
+
+        int write_frame ();
+
+        void finish_streaming ();
+
+        int get_frame_length_milliseconds();
+
+
+
+    
+};
+
 class InputStream
 {
     private:
@@ -102,6 +147,9 @@ class InputStream
     public:
         /*normal constructor*/
         InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode);
+
+        /*alternative constructor*/
+        InputStream(std::string prompt_string, const OutputStream &output_stream, SourceTimingModes timing_mode);
         
         /*destructor*/
         ~InputStream();
@@ -184,48 +232,7 @@ class DefaultInputStream
 };
 
 
-class OutputStream
-{
-    private:
-        const char* m_destination_url = NULL;
-        AVFormatContext* m_output_format_context = NULL;
-        const AVOutputFormat* m_output_format = NULL; 
-        AVCodecContext* m_output_codec_context = NULL;
-        const AVCodec* m_output_codec = NULL;
-        AVStream* m_audio_stream = NULL;
-        int m_samples_count {0};
-        int m_ret {0};
-        int m_nb_samples{0};
-        AVFrame* m_frame;
-        AVPacket* m_pkt;
-        AVDictionary* m_output_options = NULL;
-        int m_sample_rate, m_bit_rate;
 
-
-    public: 
-        /*normal constructor*/
-        OutputStream(const char* destination_url, AVDictionary* output_options, 
-            int sample_rate, int bit_rate);
-
-        /*destructor*/
-        ~OutputStream();
-
-        void cleanup ();
-
-        void set_frame(AVFrame* frame){m_frame = frame;}
-
-        AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
-
-        int write_frame ();
-
-        void finish_streaming ();
-
-        int get_frame_length_milliseconds();
-
-
-
-    
-};
 
 
 
