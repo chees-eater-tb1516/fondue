@@ -2,6 +2,7 @@
   
 ControlFlags g_flags;
 std::mutex flags_mtx;
+std::mutex new_source_mtx;
 /* takes data from one source and sends it to the output url. in case of a loss of input data, output data is synthesised to maintain the output stream*/
 void continue_streaming (InputStream* source, OutputStream& sink, DefaultInputStream& default_input, 
                          std::chrono::_V2::steady_clock::time_point& end_time)
@@ -87,7 +88,7 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
     return new_input;
 }
 
-void audio_processing (InputStream* source, InputStream* new_source, 
+void audio_processing (InputStream* source, InputStream* &new_source, 
                         OutputStream &sink)
 {
     std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
@@ -106,7 +107,9 @@ void audio_processing (InputStream* source, InputStream* new_source,
         else 
         {  
             lock.unlock();
+            std::unique_lock<std::mutex> lock2 (new_source_mtx);
             source = crossfade(source, new_source, sink, end_time);
+            lock2.unlock();
             lock.lock();
             g_flags.normal_streaming = true;
         }   
@@ -114,16 +117,31 @@ void audio_processing (InputStream* source, InputStream* new_source,
     sink.finish_streaming();
 }
 
-void control(InputStream* new_source)
+
+void control(InputStream* &new_source, const OutputStream &sink)
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
+    AVDictionary* input_options = NULL;
+    const char* input_url = "/home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3";
+    AVCodecContext* output_codec_ctx = sink.get_output_codec_context();
+    SourceTimingModes timing_mode = SourceTimingModes::realtime; 
+
     while (!g_flags.stop)
     {
         if (count == 20)
         {
+        
+            InputStream* temp_ptr {new InputStream(input_url, output_codec_ctx,input_options, timing_mode)};
+            std::unique_lock<std::mutex> lock2 (new_source_mtx);
+            new_source = temp_ptr;
+            lock2.unlock();
             std::lock_guard<std::mutex> lock (flags_mtx);
             g_flags.normal_streaming = false;
+            lock2.lock();
+            //delete temp_ptr;
+            //temp_ptr = NULL;
+         
         }
 
         if (count == 60)
@@ -150,16 +168,16 @@ int main ()
     
     OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
     InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/Durufle requiem.mp3", sink.get_output_codec_context(), input_options, SourceTimingModes::realtime);
-    InputStream test_input_2("/home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3", sink.get_output_codec_context(), input_options, SourceTimingModes::realtime);
+    
     
     
     
     InputStream* source = &test_input;
-    InputStream* new_source = &test_input_2;
+    InputStream* new_source = NULL;
     //flags.normal_streaming=false;
     
-    std::thread audioThread(audio_processing, source, new_source, std::ref(sink));
-    std::thread controlThread(control, new_source);
+    std::thread audioThread(audio_processing, source, std::ref(new_source), std::ref(sink));
+    std::thread controlThread(control, std::ref(new_source), sink);
 
     audioThread.join();
     controlThread.join();
