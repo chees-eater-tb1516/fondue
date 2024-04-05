@@ -140,13 +140,22 @@ int main ()
     //av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
     
     OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
-    InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3", sink.get_output_codec_context(), input_options, 
+    InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3", NULL, sink.get_output_codec_context(), input_options, 
                             SourceTimingModes::freetime, DefaultSourceModes::white_noise);
+    try
+    {
+        InputStream test_input2("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
+                            SourceTimingModes::realtime, DefaultSourceModes::white_noise);
+    }
+    catch (const char* exception)
+    {
+        std::cout<<exception<<": failed to correctly initialise source\n";
+        /*implement default constructor and call it here*/
+    }
     
-    /*InputStream test_input2("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
-                            SourceTimingModes::realtime, DefaultSourceModes::white_noise);*/
     
     
+    int x=1;
     InputStream* source = &test_input;
     InputStream* new_source = NULL;
     //flags.normal_streaming=false;

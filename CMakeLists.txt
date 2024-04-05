@@ -13,7 +13,6 @@ list(APPEND SOURCES
     src/OutputStream.cpp
     src/Fonduempeg.h
     src/misc_functions.cpp
-    src/DefaultInputStream.cpp
 )
 
 add_executable(fondue ${SOURCES})

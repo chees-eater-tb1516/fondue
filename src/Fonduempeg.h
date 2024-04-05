@@ -150,7 +150,7 @@ class InputStream
 
     public:
         /*normal constructor*/
-        InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, 
+        InputStream(const char* source_url, AVInputFormat* format, AVCodecContext* output_codec_ctx, AVDictionary* options, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative constructor*/

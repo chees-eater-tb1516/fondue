@@ -23,12 +23,7 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
 
     /* allocate the output media context , guesses format based on filename*/
     avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url);
-    if (!m_output_format_context) 
-    {
-        /* defaults to mpeg*/
-        printf("Could not deduce output format from file extension: using MPEG.\n");
-        avformat_alloc_output_context2(&m_output_format_context, NULL, "mpeg", m_destination_url);
-    }
+
     if (!m_output_format_context)
     {
         cleanup();
