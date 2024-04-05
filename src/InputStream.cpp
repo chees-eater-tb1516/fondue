@@ -3,11 +3,13 @@
 
 
 /*normal constructor*/
-InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, SourceTimingModes timing_mode):
+InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ctx, AVDictionary* options, 
+                            SourceTimingModes timing_mode, DefaultSourceModes source_mode):
     m_source_url {source_url},
     m_output_codec_ctx {output_codec_ctx},
     m_options {options},
-    m_timing_mode {timing_mode}
+    m_timing_mode {timing_mode},
+    m_source_mode {source_mode}
 {
     
     m_default_frame_size = DEFAULT_FRAME_SIZE;
@@ -74,7 +76,8 @@ InputStream::InputStream(const char* source_url, AVCodecContext* output_codec_ct
 
 }
 
-InputStream::InputStream(std::string prompt_url, const OutputStream &output_stream, SourceTimingModes timing_mode)
+InputStream::InputStream(std::string prompt_url, const OutputStream &output_stream, 
+                        SourceTimingModes timing_mode, DefaultSourceModes source_mode)
 {
     std::string source_url;
     AVDictionary* options = NULL;
@@ -100,7 +103,7 @@ InputStream::InputStream(std::string prompt_url, const OutputStream &output_stre
         int x = 1;
     }
     /*call the normal constructor having parsed the input string*/
-    InputStream(source_url.c_str(), output_stream.get_output_codec_context(), options, timing_mode);
+    InputStream(source_url.c_str(), output_stream.get_output_codec_context(), options, timing_mode, source_mode);
 }
 
 /*destructor*/
@@ -208,9 +211,57 @@ int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
     return m_ret;
 }
 
-/*decodes and resamples enough data from the input to produce exactly one output sized frame*/
+/*decodes and resamples enough data from the input to produce exactly one output sized frame, synthesises data if input not available*/
 bool InputStream::get_one_output_frame()
 {
+    if (!m_source_valid)
+    {
+        int i, j, v, fullscale;
+        int16_t *q = (int16_t*)m_temp_frame->data[0];
+
+        for (j = 0; j < m_temp_frame->nb_samples; j ++)
+        {
+            switch (+m_source_mode)
+            {
+                case +DefaultSourceModes::silence:
+                    v = 0;
+                    break;
+                case +DefaultSourceModes::white_noise:
+                /*fullscale = 100 gives quiet white noise*/
+                    fullscale=100;
+                    v = (static_cast<float>(std::rand())/RAND_MAX -0.5)*fullscale;
+                    break;
+                default:
+                    v = 0;
+                    break;
+            }
+            
+            for (i = 0; i < m_temp_frame->ch_layout.nb_channels; i ++)
+            {
+                *q++ = v;
+            }
+        }
+
+        /*resample to achieve the output sample format and channel configuration*/
+
+        m_ret = av_frame_make_writable(m_frame);
+        /*since not changing the sample rate the number of samples shouldn't change*/
+        m_ret = swr_convert(m_swr_ctx, m_frame->data, m_temp_frame->nb_samples,
+                            (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
+
+        if (m_ret < 0)
+        {
+            printf("error resampling frame: %s\n", av_error_to_string(m_ret));
+            cleanup();
+            throw "Default input: error resampling frame";
+        }
+
+        return true;
+
+    }
+    
+    
+    
     
     /*if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
     {
@@ -394,6 +445,39 @@ void InputStream::end_crossfade()
         cleanup();
         throw "end crossfading: failed to initialise the resampler context";
     }
+}
+
+void InputStream::init_default_source()
+{
+    m_source_valid = false;
+    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
+    av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &default_channel_layout,      0);
+    av_opt_set_int       (m_swr_ctx, "in_sample_rate",     m_output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16,     0);
+
+    av_frame_free(&m_temp_frame);
+    m_temp_frame = av_frame_alloc();
+    m_temp_frame->format = AV_SAMPLE_FMT_S16;
+    av_channel_layout_copy(&m_temp_frame->ch_layout, &default_channel_layout);
+    m_temp_frame->sample_rate = m_output_codec_ctx->sample_rate;
+    m_temp_frame->nb_samples = m_output_frame_size;
+
+
+    if (m_output_frame_size)
+    {
+        if (av_frame_get_buffer(m_temp_frame,0) < 0)
+        {
+            cleanup();
+            throw "Default input: error allocating a temporary audio buffer";
+        }
+    }
+
+    if ((swr_init(m_swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "switching to default source: failed to initialise the resampler context";
+    }
+
 }
 /*set resampling options for both input and output of resampler*/
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)

@@ -202,9 +202,9 @@ void OutputStream::cleanup()
 }
 
 
-int OutputStream::write_frame()
+int OutputStream::write_frame(InputStream* source)
 {
-    //av_assert0(m_frame->nb_samples == m_nb_samples);
+    m_frame = source->get_frame();
     m_frame->pts = av_rescale_q(m_samples_count, (AVRational){1, m_output_codec_context->sample_rate},
                                 m_output_codec_context->time_base);
     m_samples_count += m_frame -> nb_samples;
