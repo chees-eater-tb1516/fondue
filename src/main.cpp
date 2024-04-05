@@ -149,8 +149,8 @@ int main ()
     }
     catch (const char* exception)
     {
-        std::cout<<exception<<": failed to correctly initialise source\n";
-        /*implement default constructor and call it here*/
+        std::cout<<exception<<": failed to correctly access input, using default source\n";
+        /*implement 'no input' constructor and call it here*/
     }
     
     
