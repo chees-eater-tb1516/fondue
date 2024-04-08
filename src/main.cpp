@@ -144,13 +144,14 @@ int main ()
                             SourceTimingModes::freetime, DefaultSourceModes::white_noise);
     try
     {
-        InputStream test_input2("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
+        test_input = InputStream ("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
                             SourceTimingModes::realtime, DefaultSourceModes::white_noise);
     }
     catch (const char* exception)
     {
         std::cout<<exception<<": failed to correctly access input, using default source\n";
         /*implement 'no input' constructor and call it here*/
+        test_input = InputStream(sink, DefaultSourceModes::white_noise);
     }
     
     

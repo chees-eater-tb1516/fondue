@@ -104,6 +104,25 @@ InputStream::InputStream(std::string prompt_url, const OutputStream &output_stre
     InputStream(source_url.c_str(), format, output_stream.get_output_codec_context(), options, timing_mode, source_mode);
 }
 
+InputStream::InputStream(const OutputStream &output_stream, DefaultSourceModes source_mode)
+{
+    m_timing_mode = SourceTimingModes::realtime;
+    m_default_frame_size = DEFAULT_FRAME_SIZE;
+    m_output_codec_ctx = output_stream.get_output_codec_context();
+    m_frame = alloc_frame(m_output_codec_ctx);
+    m_output_frame_size = m_frame->nb_samples;   
+    m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
+    m_swr_ctx = swr_alloc();
+    set_resampler_options(m_swr_ctx, m_output_codec_ctx);
+    
+    if (!m_swr_ctx) {
+        cleanup();
+        throw "Input: could not allocate a resampler context";
+        
+    }
+    init_default_source();
+}
+
 /*destructor*/
 InputStream::~InputStream()
 {
