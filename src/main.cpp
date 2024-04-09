@@ -140,9 +140,9 @@ int main ()
     //av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
     
     OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
-    InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3", NULL, sink.get_output_codec_context(), input_options, 
+    InputStream test_input("/home/tb1516/fondue/audio_sources/main_theme.mp3", NULL, sink.get_output_codec_context(), input_options, 
                             SourceTimingModes::freetime, DefaultSourceModes::white_noise);
-    try
+    /*try
     {
         InputStream test_input2("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
                             SourceTimingModes::realtime, DefaultSourceModes::white_noise);
@@ -151,7 +151,7 @@ int main ()
     {
         std::cout<<exception<<": failed to correctly access input, using default source\n";
         /*implement 'no input' constructor and call it here*/
-    }
+    /*}*/
     
     
     
