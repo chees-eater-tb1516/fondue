@@ -73,8 +73,6 @@ struct timespec get_timespec_from_ticks(int ticks);
 
 void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, const SourceTimingModes& timing_mode);
 
-class InputStream;
-
 class OutputStream
 {
     private:
@@ -107,7 +105,7 @@ class OutputStream
 
         AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
 
-        int write_frame (InputStream* source);
+        int write_frame ();
 
         void finish_streaming ();
 
@@ -143,8 +141,6 @@ class InputStream
         int m_number_buffered_samples = 0;
         std::chrono::duration<double> m_loop_duration {};
         SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
-        bool m_source_valid = true;
-        DefaultSourceModes m_source_mode = DefaultSourceModes::white_noise;
         
 
 
@@ -154,8 +150,7 @@ class InputStream
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative constructor*/
-        InputStream(std::string prompt_string, const OutputStream &output_stream, 
-                    SourceTimingModes timing_mode, DefaultSourceModes source_mode);
+        InputStream(std::string prompt_string, const OutputStream &output_stream, SourceTimingModes timing_mode);
         
         /*destructor*/
         ~InputStream();
@@ -199,10 +194,6 @@ class InputStream
         /*return resamplers to normal streaming settings*/
         void end_crossfade();
 
-        void init_default_source();
-
-        bool get_source_valid() const {return m_source_valid;}
-
         bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
 
         int get_frame_length_milliseconds();
@@ -211,5 +202,39 @@ class InputStream
 
     
 };
+
+class DefaultInputStream
+{   
+    AVCodecContext* m_output_codec_ctx = NULL;
+    AVFrame* m_frame = NULL;
+    AVFrame* m_temp_frame = NULL;
+    struct SwrContext* m_swr_ctx;
+    int m_ret{};
+    int m_output_data_size;
+    std::chrono::duration<double> m_loop_duration {};
+    SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
+
+    public:
+    /*constructor*/
+    DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode);
+    /*destructor*/
+    ~DefaultInputStream();
+
+    void cleanup();
+
+    bool get_one_output_frame(DefaultSourceModes mode);
+
+    bool get_one_output_frame();
+
+    AVFrame* get_frame() const {return m_frame;}
+
+    void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
+
+};
+
+
+
+
+
 
 #endif

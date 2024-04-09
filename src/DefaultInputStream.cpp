@@ -1,3 +1,5 @@
+#include"Fonduempeg.h"
+
 /*normal constructor, does most of the FFMpeg boilerplate stuff*/
 DefaultInputStream::DefaultInputStream(AVCodecContext* output_codec_ctx, SourceTimingModes timing_mode):
     m_output_codec_ctx {output_codec_ctx},

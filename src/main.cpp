@@ -3,28 +3,52 @@
 ControlFlags g_flags;
 std::mutex flags_mtx;
 std::mutex new_source_mtx;
-/* takes data from one source and sends it to the output url*/
-void continue_streaming (InputStream* source, OutputStream& sink, 
+/* takes data from one source and sends it to the output url. in case of a loss of input data, output data is synthesised to maintain the output stream*/
+void continue_streaming (InputStream* source, OutputStream& sink, DefaultInputStream& default_input, 
                          std::chrono::_V2::steady_clock::time_point& end_time)
 {
+    bool input_valid = true;
     std::unique_lock<std::mutex> lock (flags_mtx);
     while (g_flags.normal_streaming && !g_flags.stop)
     {
         lock.unlock();
-        try
+        if (input_valid)
         {
-            source->get_one_output_frame();
-            sink.write_frame(source);
-            source->sleep(end_time);          
+            try
+            {
+                source->get_one_output_frame();
+                int x=1;    
+            }
+
+            catch (const char* exception)
+            {
+                std::cout<<exception<<": changing to default source\n";
+                default_input.get_one_output_frame();
+                sink.set_frame(default_input.get_frame());
+                sink.write_frame();
+                input_valid = false;
+                default_input.sleep(end_time);
+                lock.lock();
+                continue;
+            
+            }
+            sink.set_frame(source->get_frame());
+            sink.write_frame();
+            source->sleep(end_time);
+            lock.lock();
+            continue;
+
         }
 
-        catch (const char* exception)
-        {
-            std::cout<<exception<<": changing to default source\n";
-            source->init_default_source();
-        }
+        else
+            default_input.get_one_output_frame();
+            sink.set_frame(default_input.get_frame());
+            sink.write_frame();
+            default_input.sleep(end_time);
+            lock.lock();
+        
+        
 
-        lock.lock();
     } 
 
    
@@ -46,16 +70,19 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
         {
             new_input->get_one_output_frame();
             source->crossfade_frame (new_input->get_frame(), fade_time_remaining, fade_time);
-            sink.write_frame(source);
-            source->sleep(end_time);
         }
 
-        /*if anything fails*/
+        /*if either fail*/
         catch (const char* exception)
         {
             std::cout<<exception<<": crossfading failed\n";
             return source;
         }
+        
+        sink.set_frame(source->get_frame());
+        sink.write_frame();
+        source->sleep(end_time);
+
     }
     new_input->end_crossfade();
     return new_input;
@@ -65,15 +92,16 @@ void audio_processing (InputStream* source, InputStream* &new_source,
                         OutputStream &sink)
 {
     std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
+    DefaultInputStream default_input(sink.get_output_codec_context(), SourceTimingModes::realtime);
+
     std::unique_lock<std::mutex> lock (flags_mtx);
     while (!g_flags.stop)
     {
         if (g_flags.normal_streaming)
         {
             lock.unlock();
-            continue_streaming(source, sink, end_time);
+            continue_streaming(source, sink, default_input, end_time);
             lock.lock();
-            continue;
         }
             
         else 
@@ -98,14 +126,13 @@ void control(InputStream* &new_source, const OutputStream &sink)
     const char* input_url = "/home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3";
     AVCodecContext* output_codec_ctx = sink.get_output_codec_context();
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
-    DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
     while (!g_flags.stop)
     {
-        /*if (count == 20)
+        if (count == 20)
         {
         
-            InputStream* temp_ptr {new InputStream(input_url, output_codec_ctx, input_options, timing_mode, source_mode)};
+            InputStream* temp_ptr {new InputStream(input_url, output_codec_ctx,input_options, timing_mode)};
             std::unique_lock<std::mutex> lock2 (new_source_mtx);
             new_source = temp_ptr;
             lock2.unlock();
@@ -122,7 +149,7 @@ void control(InputStream* &new_source, const OutputStream &sink)
             std::lock_guard<std::mutex> lock (flags_mtx);
             g_flags.stop = true;
         }
-        count ++;*/
+        count ++;
         std::this_thread::sleep_for(refresh_interval);
     }
 }
