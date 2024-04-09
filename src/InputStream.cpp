@@ -74,6 +74,7 @@ InputStream::InputStream(std::string prompt_url, const OutputStream &output_stre
     std::string source_url;
     AVDictionary* options = NULL;
     AVInputFormat* format = NULL;
+    DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
     /*split prompt into key-value pairs*/
     char *key, *value;
     key = strtok (const_cast<char*>(prompt_url.c_str()), " ");

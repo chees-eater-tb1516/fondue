@@ -129,7 +129,7 @@ void control(InputStream* &new_source, const OutputStream &sink)
 
     while (!g_flags.stop)
     {
-        if (count == 20)
+        /*if (count == 20)
         {
         
             InputStream* temp_ptr {new InputStream(input_url, output_codec_ctx,input_options, timing_mode)};
@@ -142,7 +142,7 @@ void control(InputStream* &new_source, const OutputStream &sink)
             //delete temp_ptr;
             //temp_ptr = NULL;
          
-        }
+        }*/
 
         if (count == 60)
         {
@@ -169,7 +169,7 @@ int main ()
     OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
     InputStream test_input("/home/tb1516/fondue/audio_sources/main_theme.mp3", NULL, sink.get_output_codec_context(), input_options, 
                             SourceTimingModes::freetime, DefaultSourceModes::white_noise);
-    try
+    /*try
     {
         InputStream test_input2("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
                             SourceTimingModes::realtime, DefaultSourceModes::white_noise);
@@ -178,7 +178,7 @@ int main ()
     {
         std::cout<<exception<<": failed to correctly access input, using default source\n";
         /*implement 'no input' constructor and call it here*/
-    }
+    /*}*/
     
     
     
