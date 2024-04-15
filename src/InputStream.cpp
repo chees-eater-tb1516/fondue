@@ -19,54 +19,39 @@ InputStream::InputStream(const char* source_url, AVInputFormat* format, AVCodecC
 
     avdevice_register_all();
 
-    /*don't try and open a null url*/
-    if (m_source_url)
+    /*open input file and deduce the right format context from the file*/
+    if (avformat_open_input(&m_format_ctx, m_source_url, format, &m_options) < 0)
     {
-        /*open input file and deduce the right format context from the file*/
-        if (avformat_open_input(&m_format_ctx, m_source_url, format, &m_options) < 0)
-        {
-            throw "Input: couldn't open source";
-        }
-
-        /*retrieve stream information from the format context*/
-        if (avformat_find_stream_info(m_format_ctx, NULL) < 0)
-        {
-            throw "Input: could not find stream information";
-        }
-
-
-        /*initialise the codec etc*/
-        if (open_codec_context(AVMEDIA_TYPE_AUDIO) < 0)
-        {
-            throw "Input: could not open codec context";
-        }
-
-        av_dump_format(m_format_ctx, 0, m_source_url, 0);
-
-        m_pkt = av_packet_alloc();
-        
-        if (!m_pkt) 
-        {
-            cleanup();
-            throw "Input: could not allocate packet";
-        }
-
+        throw "Input: couldn't open source";
     }
-    /*what to do in case of a null url*/
-    if (!m_source_url)
+
+    /*retrieve stream information from the format context*/
+    if (avformat_find_stream_info(m_format_ctx, NULL) < 0)
     {
-        m_source_valid = false;
-        m_input_codec_ctx = avcodec_alloc_context3(NULL);
-        m_input_codec_ctx -> frame_size = m_output_codec_ctx -> frame_size;
-        m_input_codec_ctx -> sample_fmt = AV_SAMPLE_FMT_S16;
-        m_input_codec_ctx -> sample_rate = m_output_codec_ctx -> sample_rate; 
+        throw "Input: could not find stream information";
     }
+
+
+    /*initialise the codec etc*/
+    if (open_codec_context(AVMEDIA_TYPE_AUDIO) < 0)
+    {
+        throw "Input: could not open codec context";
+    }
+
+    av_dump_format(m_format_ctx, 0, m_source_url, 0);
+
+    m_pkt = av_packet_alloc();
     
+    if (!m_pkt) 
+    {
+        cleanup();
+        throw "Input: could not allocate packet";
+    }
+
+    
+   
 
     m_temp_frame = alloc_frame(m_input_codec_ctx);
-
-    
-
 
         /* create resampling contexts */
     m_swr_ctx = alloc_resampler(m_input_codec_ctx, m_output_codec_ctx);
@@ -121,10 +106,56 @@ InputStream::InputStream(std::string prompt_url, const OutputStream &output_stre
     InputStream(source_url.c_str(), format, output_stream.get_output_codec_context(), options, timing_mode, source_mode);
 }
 
-InputStream::InputStream(const OutputStream &output_stream, DefaultSourceModes source_mode)
+InputStream::InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode):
+    m_output_codec_ctx {output_codec_ctx},
+    m_source_mode {source_mode}
 {
     
-    InputStream(NULL, NULL, output_stream.get_output_codec_context(), NULL, SourceTimingModes::realtime, source_mode);
+    m_timing_mode = SourceTimingModes::realtime;
+    m_frame = alloc_frame(m_output_codec_ctx);
+    m_output_frame_size = m_frame->nb_samples;
+    m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
+    m_source_valid = false; 
+    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
+
+    /*allocate the null input frame*/
+    m_temp_frame = av_frame_alloc();
+    m_temp_frame->format = AV_SAMPLE_FMT_S16;
+    av_channel_layout_copy(&m_temp_frame->ch_layout, &default_channel_layout);
+    m_temp_frame->sample_rate = m_output_codec_ctx->sample_rate;
+    m_temp_frame->nb_samples = m_output_frame_size;
+
+    if (m_output_frame_size)
+    {
+        if (av_frame_get_buffer(m_temp_frame,0) < 0)
+        {
+            cleanup();
+            throw "Default input: error allocating a temporary audio buffer";
+        }
+    }
+
+    /*allocate the resampling context*/
+    m_swr_ctx = swr_alloc();
+    if (!m_swr_ctx) {
+        cleanup();
+        throw "Default input: could not allocate a resampler context"; 
+    }
+
+    /*set the resampling options*/
+    av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &default_channel_layout,      0);
+    av_opt_set_int       (m_swr_ctx, "in_sample_rate",     m_output_codec_ctx->sample_rate,    0);
+    av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16,     0);
+    set_resampler_options(m_swr_ctx, m_output_codec_ctx);
+
+    /* initialize the resampling context */
+    if ((swr_init(m_swr_ctx)) < 0) 
+    {
+        cleanup();
+        throw "Default input: failed to initialise the resampler context";
+    }
+
+    std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx->sample_rate);
+    m_loop_duration = (m_output_frame_size-1) * sample_duration;
 
 }
 
@@ -277,7 +308,7 @@ bool InputStream::get_one_output_frame()
             cleanup();
             throw "Default input: error resampling frame";
         }
-        //resample_one_input_frame();
+        
 
         return true;
 

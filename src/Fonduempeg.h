@@ -158,7 +158,7 @@ class InputStream
                     SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative constructor in case input URL appears to be invalid*/
-        InputStream(const OutputStream &output_stream, DefaultSourceModes source_mode);
+        InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode);
         
         /*destructor*/
         ~InputStream();
