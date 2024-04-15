@@ -18,37 +18,54 @@ InputStream::InputStream(const char* source_url, AVInputFormat* format, AVCodecC
     m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
 
     avdevice_register_all();
+
+    /*don't try and open a null url*/
+    if (m_source_url)
+    {
+        /*open input file and deduce the right format context from the file*/
+        if (avformat_open_input(&m_format_ctx, m_source_url, format, &m_options) < 0)
+        {
+            throw "Input: couldn't open source";
+        }
+
+        /*retrieve stream information from the format context*/
+        if (avformat_find_stream_info(m_format_ctx, NULL) < 0)
+        {
+            throw "Input: could not find stream information";
+        }
+
+
+        /*initialise the codec etc*/
+        if (open_codec_context(AVMEDIA_TYPE_AUDIO) < 0)
+        {
+            throw "Input: could not open codec context";
+        }
+
+        av_dump_format(m_format_ctx, 0, m_source_url, 0);
+
+        m_pkt = av_packet_alloc();
+        
+        if (!m_pkt) 
+        {
+            cleanup();
+            throw "Input: could not allocate packet";
+        }
+
+    }
+    /*what to do in case of a null url*/
+    if (!m_source_url)
+    {
+        m_source_valid = false;
+        m_input_codec_ctx = avcodec_alloc_context3(NULL);
+        m_input_codec_ctx -> frame_size = m_output_codec_ctx -> frame_size;
+        m_input_codec_ctx -> sample_fmt = AV_SAMPLE_FMT_S16;
+        m_input_codec_ctx -> sample_rate = m_output_codec_ctx -> sample_rate; 
+    }
     
-    /*open input file and deduce the right format context from the file*/
-    if (avformat_open_input(&m_format_ctx, m_source_url, format, &m_options) < 0)
-    {
-        throw "Input: couldn't open source";
-    }
-
-    /*retrieve stream information from the format context*/
-    if (avformat_find_stream_info(m_format_ctx, NULL) < 0)
-    {
-        throw "Input: could not find stream information";
-    }
-
-
-    /*initialise the codec etc*/
-    if (open_codec_context(AVMEDIA_TYPE_AUDIO) < 0)
-    {
-        throw "Input: could not open codec context";
-    }
-
-    av_dump_format(m_format_ctx, 0, m_source_url, 0);
-
 
     m_temp_frame = alloc_frame(m_input_codec_ctx);
 
-    m_pkt = av_packet_alloc();
-    if (!m_pkt) 
-    {
-        cleanup();
-        throw "Input: could not allocate packet";
-    }
+    
 
 
         /* create resampling contexts */
@@ -106,21 +123,9 @@ InputStream::InputStream(std::string prompt_url, const OutputStream &output_stre
 
 InputStream::InputStream(const OutputStream &output_stream, DefaultSourceModes source_mode)
 {
-    m_timing_mode = SourceTimingModes::realtime;
-    m_default_frame_size = DEFAULT_FRAME_SIZE;
-    m_output_codec_ctx = output_stream.get_output_codec_context();
-    m_frame = alloc_frame(m_output_codec_ctx);
-    m_output_frame_size = m_frame->nb_samples;   
-    m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
-    m_swr_ctx = swr_alloc();
-    set_resampler_options(m_swr_ctx, m_output_codec_ctx);
     
-    if (!m_swr_ctx) {
-        cleanup();
-        throw "Input: could not allocate a resampler context";
-        
-    }
-    init_default_source();
+    InputStream(NULL, NULL, output_stream.get_output_codec_context(), NULL, SourceTimingModes::realtime, source_mode);
+
 }
 
 /*destructor*/
@@ -264,7 +269,7 @@ bool InputStream::get_one_output_frame()
         m_ret = av_frame_make_writable(m_frame);
         /*since not changing the sample rate the number of samples shouldn't change*/
         m_ret = swr_convert(m_swr_ctx, m_frame->data, m_temp_frame->nb_samples,
-                            (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
+                        (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
 
         if (m_ret < 0)
         {
@@ -272,6 +277,7 @@ bool InputStream::get_one_output_frame()
             cleanup();
             throw "Default input: error resampling frame";
         }
+        //resample_one_input_frame();
 
         return true;
 
@@ -337,6 +343,36 @@ bool InputStream::get_one_output_frame()
 }
 
 
+/*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
+bool InputStream::crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time)
+{
+    int i , j; 
+    float *q , *v;
+    get_one_output_frame();
+
+    /*a value between zero and one representing how far through the fade we are currently*/
+    float non_dimensional_fade_time = 1 - static_cast<float>(fade_time_remaining)/fade_time;
+
+    float non_dimensional_fade_time_increment = 1 / (static_cast<float>(new_input_frame->sample_rate/1000)*fade_time);
+
+    for (i = 0; i < m_frame->ch_layout.nb_channels; i++)
+    {
+        q = (float*)m_frame->data[i];
+        v = (float*)new_input_frame->data[i];
+
+        for (j = 0; j < m_frame->nb_samples; j++)
+        {
+            *q = *q *(1-non_dimensional_fade_time) + *v * non_dimensional_fade_time; 
+            q++;
+            v++;
+        }
+    }
+
+    resample_one_input_frame(m_swr_ctx_xfade); 
+    fade_time_remaining -= get_frame_length_milliseconds();
+    return true;
+    
+}
 
 int InputStream::open_codec_context(enum AVMediaType type)
 {
@@ -392,10 +428,14 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
         cleanup();
         throw "Input: error allocating an audio frame";
     }
-    if (codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-        nb_samples = DEFAULT_FRAME_SIZE;
-    else
-        nb_samples = codec_context->frame_size;
+
+    if (codec_context->codec)
+    {
+        if (codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+            codec_context->frame_size = DEFAULT_FRAME_SIZE;
+    }
+    
+    nb_samples = codec_context->frame_size;
  
     frame->format = codec_context -> sample_fmt;
     av_channel_layout_copy(&frame->ch_layout, &codec_context->ch_layout);
@@ -412,36 +452,7 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
  
     return frame;
 }
-/*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
-bool InputStream::crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time)
-{
-    int i , j; 
-    float *q , *v;
-    get_one_output_frame();
 
-    /*a value between zero and one representing how far through the fade we are currently*/
-    float non_dimensional_fade_time = 1 - static_cast<float>(fade_time_remaining)/fade_time;
-
-    float non_dimensional_fade_time_increment = 1 / (static_cast<float>(new_input_frame->sample_rate/1000)*fade_time);
-
-    for (i = 0; i < m_frame->ch_layout.nb_channels; i++)
-    {
-        q = (float*)m_frame->data[i];
-        v = (float*)new_input_frame->data[i];
-
-        for (j = 0; j < m_frame->nb_samples; j++)
-        {
-            *q = *q *(1-non_dimensional_fade_time) + *v * non_dimensional_fade_time; 
-            q++;
-            v++;
-        }
-    }
-
-    resample_one_input_frame(m_swr_ctx_xfade); 
-    fade_time_remaining -= get_frame_length_milliseconds();
-    return true;
-    
-}
 
 void InputStream::init_crossfade()
 {
@@ -488,8 +499,8 @@ void InputStream::init_default_source()
             throw "Default input: error allocating a temporary audio buffer";
         }
     }
-
-    if ((swr_init(m_swr_ctx)) < 0) 
+    m_ret = swr_init(m_swr_ctx);
+    if (m_ret < 0) 
     {
         cleanup();
         throw "switching to default source: failed to initialise the resampler context";
