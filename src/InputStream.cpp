@@ -2,7 +2,7 @@
 #include "Fonduempeg.h"
 
 
-/*normal constructor*/
+
 InputStream::InputStream(const char* source_url, AVInputFormat* format, AVCodecContext* output_codec_ctx, AVDictionary* options, 
                             SourceTimingModes timing_mode, DefaultSourceModes source_mode):
     m_source_url {source_url},
@@ -17,7 +17,7 @@ InputStream::InputStream(const char* source_url, AVInputFormat* format, AVCodecC
     m_output_frame_size = m_frame->nb_samples;   
     m_swr_ctx_xfade = alloc_resampler(m_output_codec_ctx);
 
-    avdevice_register_all();
+    
 
     /*open input file and deduce the right format context from the file*/
     if (avformat_open_input(&m_format_ctx, m_source_url, format, &m_options) < 0)
@@ -72,40 +72,15 @@ InputStream::InputStream(const char* source_url, AVInputFormat* format, AVCodecC
 
 }
 
-InputStream::InputStream(std::string prompt_url, const OutputStream &output_stream, 
-                        SourceTimingModes timing_mode, DefaultSourceModes source_mode)
+InputStream::InputStream(FFMPEGString &prompt_string, AVCodecContext* output_codec_ctx, 
+                        SourceTimingModes timing_mode, DefaultSourceModes source_mode):
+                        
+                        InputStream(prompt_string.url(), prompt_string.input_format(), output_codec_ctx, prompt_string.options(), timing_mode, source_mode)
 {
-    std::string source_url;
-    AVDictionary* options = NULL;
-    AVInputFormat* format = NULL;
-    /*split prompt into key-value pairs*/
-    char *key, *value;
-    key = strtok (const_cast<char*>(prompt_url.c_str()), " ");
-    value = strtok(NULL, " ");
-    while (key != NULL)
-    {   
-        /*special case for the input URL*/
-        if (strcmp(key, "-i") == 0)
-        {
-            source_url.append(value);            
-        }
-
-        if (strcmp(key, "-f") == 0)
-        {
-            format = const_cast<AVInputFormat*>(av_find_input_format(value));
-        }
-
-        /*add the key-value pair to the options dictionary*/
-        av_dict_set(&options, key, value, 0);
-        key = strtok(NULL, " ");
-        value = strtok(NULL, " ");
-       
-        int x = 1;
-    }
-    /*call the normal constructor having parsed the input string*/
-    InputStream(source_url.c_str(), format, output_stream.get_output_codec_context(), options, timing_mode, source_mode);
+    /*uses constructor delegation*/
 }
 
+   
 InputStream::InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode):
     m_output_codec_ctx {output_codec_ctx},
     m_source_mode {source_mode}
@@ -159,7 +134,7 @@ InputStream::InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes so
 
 }
 
-/*destructor*/
+
 InputStream::~InputStream()
 {
     cleanup();
@@ -231,7 +206,7 @@ int InputStream::decode_one_input_frame_recursive()
 }
 
 
-/*converts sample format, sample rate and channel layout to make the input data conform to the output requirements*/
+
 int InputStream::resample_one_input_frame()
 {
     
@@ -253,10 +228,10 @@ int InputStream::resample_one_input_frame()
     av_frame_unref(m_temp_frame);
     return m_ret;
 }
-/*overload for resampling after crossfading note CANNOT handle sample rate changes*/
+
 int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
 {
-    
+    /*note CANNOT deal with sample rate changes, should only be used with crossfade*/
     m_ret=swr_convert(swr_ctx, m_frame->data, m_frame->nb_samples, 
                         (const uint8_t **)m_frame->data, m_frame->nb_samples);
     
@@ -264,7 +239,7 @@ int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
     return m_ret;
 }
 
-/*decodes and resamples enough data from the input to produce exactly one output sized frame, synthesises data if input not available*/
+
 bool InputStream::get_one_output_frame()
 {
     if (!m_source_valid)
@@ -374,9 +349,10 @@ bool InputStream::get_one_output_frame()
 }
 
 
-/*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
+
 bool InputStream::crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time)
 {
+    /*uses pointer arithmetic to linearly fade between two frames, requires AV_SAMPLE_FMT_FLTP*/
     int i , j; 
     float *q , *v;
     get_one_output_frame();
@@ -538,7 +514,7 @@ void InputStream::init_default_source()
     }
 
 }
-/*set resampling options for both input and output of resampler*/
+
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
 {
     av_opt_set_chlayout  (swr_ctx, "in_chlayout",       &input_codec_ctx->ch_layout,      0);
@@ -548,14 +524,14 @@ void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* inp
     av_opt_set_int       (swr_ctx, "out_sample_rate",    output_codec_ctx->sample_rate,    0);
     av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     output_codec_ctx->sample_fmt,     0);
 }
-/*set resampling output options to defaults*/
+
 void InputStream::set_resampler_options(SwrContext* swr_ctx)
 {
     AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
     av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &default_channel_layout,      0);
     av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     AV_SAMPLE_FMT_FLTP,     0);
 }
-/*set resampling output options*/
+
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx)
 {
     av_opt_set_chlayout  (swr_ctx, "out_chlayout",      &output_codec_ctx->ch_layout,      0);
@@ -563,7 +539,7 @@ void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* out
     av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt",     output_codec_ctx->sample_fmt,     0);
 }
 
-/*allocate a resampling context with specified input and output settings*/
+
 struct SwrContext* InputStream::alloc_resampler (AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)
 {
     /*create the resampling context*/
@@ -587,7 +563,7 @@ struct SwrContext* InputStream::alloc_resampler (AVCodecContext* input_codec_ctx
     return swr_ctx;
 
 }
-/*allocate a resampling context with default input settings*/
+
 struct SwrContext* InputStream::alloc_resampler (AVCodecContext* output_codec_ctx)
 {
     /*create the resampling context*/

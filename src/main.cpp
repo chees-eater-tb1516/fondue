@@ -130,38 +130,33 @@ void control(InputStream* &new_source, const OutputStream &sink)
 
 int main ()
 {
-    /*options pertaining to the input, generally corresponds to the parts of the ffmpeg input prompt*/
-    AVDictionary* input_options = NULL;
-    /*options pertaining to the output, generally corresponds to the parts of the ffmpeg output prompt*/
-    AVDictionary* output_options = NULL;
-    /*hard coded icecast options, uncomment if rqd*/
-    //av_dict_set(&output_options, "c:a", "libmp3lame", 0);
-    //av_dict_set(&output_options, "f", "mp3", 0);
-    //av_dict_set(&output_options, "content_type", "audio/mpeg", 0);
-    
-    OutputStream sink("test.mp3", output_options, DEFAULT_SAMPLE_RATE, DEFAULT_BIT_RATE);
-    //InputStream test_input("/home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3", NULL, sink.get_output_codec_context(), input_options, 
-     //                       SourceTimingModes::freetime, DefaultSourceModes::white_noise);
 
-    InputStream test_input(sink.get_output_codec_context(), DefaultSourceModes::white_noise);
-    /*try
+    
+    FFMPEGString input_prompt{"-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3"};
+    //FFMPEGString input_prompt{"-f alsa -i hw:1,0 -ar 44100 -ac 2"};
+    FFMPEGString output_prompt{"test.mp3"};
+    //FFMPEGString output_prompt{"-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"}
+
+    avdevice_register_all();
+
+    
+    OutputStream sink{output_prompt};
+
+    InputStream* source;
+
+    try
     {
-        test_input = InputStream ("-f alsa -i hw:1,0 -ar 44100 -ac 2", sink, 
-                            SourceTimingModes::realtime, DefaultSourceModes::white_noise);
+        source = new InputStream (input_prompt, sink.get_output_codec_context(),
+                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise);
     }
     catch (const char* exception)
     {
         std::cout<<exception<<": failed to correctly access input, using default source\n";
+        source = new InputStream (sink.get_output_codec_context(), DefaultSourceModes::white_noise);
+    }
     
-        test_input = InputStream(sink.get_output_codec_context(), DefaultSourceModes::white_noise);
-    }*/
     
-    
-    int x=1;
-    InputStream* source = &test_input;
     InputStream* new_source = NULL;
-    //flags.normal_streaming=false;
-    
     std::thread audioThread(audio_processing, source, std::ref(new_source), std::ref(sink));
     std::thread controlThread(control, std::ref(new_source), sink);
 

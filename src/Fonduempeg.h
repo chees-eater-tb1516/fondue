@@ -1,7 +1,7 @@
 /*
 * Written by Tom Briggs in 2024
 *
-* Fonduempeg is a C++ API for audio encoding calling upon the C API of FFmpeg. 
+* Fonduempeg is a C++ API for audio demuxing/ decoding/ encoding/ muxing calling upon the C API of FFmpeg. 
 * 
 * It aims to provide an easier user experience by handling much of the boilerplate 
 * code in the C API within the constructor functions of the classes defined here.  
@@ -75,6 +75,9 @@ void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const st
 
 class InputStream;
 
+class FFMPEGString; 
+
+/*provides methods to encode and mux raw audio data, one frame at a time*/
 class OutputStream
 {
     private:
@@ -97,6 +100,9 @@ class OutputStream
         /*normal constructor*/
         OutputStream(const char* destination_url, AVDictionary* output_options, 
             int sample_rate, int bit_rate);
+        
+        /*alternative constructor from ffmpeg prompt*/
+        OutputStream(FFMPEGString &prompt_string);
 
         /*destructor*/
         ~OutputStream();
@@ -107,8 +113,10 @@ class OutputStream
 
         AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
 
+        /*encodes and muxes one frame of audio data*/
         int write_frame (InputStream* source);
 
+        /*closes the file and does other end of stream tasks*/
         void finish_streaming ();
 
         int get_frame_length_milliseconds();
@@ -118,6 +126,9 @@ class OutputStream
     
 };
 
+/*provides methods to demux and decode audio data and provide frames of the correct size, sample rate and sample format for the output stream
+* has the capability to synthesise audio data if the input source is or becomes invalid
+* also has the capability to crossfade to a new source*/
 class InputStream
 {
     private:
@@ -153,11 +164,11 @@ class InputStream
         InputStream(const char* source_url, AVInputFormat* format, AVCodecContext* output_codec_ctx, AVDictionary* options, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
-        /*alternative constructor*/
-        InputStream(std::string prompt_string, const OutputStream &output_stream, 
+        /*alternative constructor from ffmpeg prompt*/
+        InputStream(FFMPEGString &prompt_string, AVCodecContext* output_codec_ctx, 
                     SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
-        /*alternative constructor in case input URL appears to be invalid*/
+        /*alternative 'no source' constructor*/
         InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode);
         
         /*destructor*/
@@ -174,26 +185,34 @@ class InputStream
         not contain the correct number of samples for the output encoder*/
         int resample_one_input_frame();
 
+        /*resample with a specific resampling context*/
         int resample_one_input_frame(SwrContext* swr_ctx);
 
+        /*return exactly one frame that matches all the requirements of the output stream*/
         bool get_one_output_frame();
-
-        void unref_frame();
 
         AVFrame* get_frame() const {return m_frame;}
 
+        /*handles boilerplate of the decoder*/
         int open_codec_context(enum AVMediaType type);
 
+        /*handles boilerplate to do with allocating a frame*/
         AVFrame* alloc_frame(AVCodecContext* codec_context);
 
+        /*handles boilerplate to do with allocating the resampling context 
+        * to ensure the input stream data is resampled to match the output stream*/
         struct SwrContext* alloc_resampler (AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx);
 
-        struct SwrContext* alloc_resampler(AVCodecContext* input_codec_ctx);
+        /*allocate a resampling context with default input options for crossfading*/
+        struct SwrContext* alloc_resampler(AVCodecContext* output_codec_ctx);
 
+        /*set the resampling context options*/
         void set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx);
 
+        /*set the resampling context options with default output settings*/
         void set_resampler_options(SwrContext* swr_ctx);
 
+        /*set the resampling context output options*/
         void set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx);
 
         /*configure resamplers for crossfading*/
@@ -202,17 +221,42 @@ class InputStream
         /*return resamplers to normal streaming settings*/
         void end_crossfade();
 
+        /*makes the InputStream object morph to 'no source' behaviour*/
         void init_default_source();
 
         bool get_source_valid() const {return m_source_valid;}
 
+        /*crossfades two sources one frame at a time, call multiple times to complete the whole crossfade*/
         bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
 
         int get_frame_length_milliseconds();
 
+        /*sleeps the thread for the correct amount of time to ensure real time operation*/
         void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
 
     
+};
+
+/*class for parsing ffmpeg prompts*/
+class FFMPEGString 
+{
+    private:
+    std::string m_string;
+    std::string m_destination_url {""};
+    std::string m_source_url {""};
+    AVDictionary* m_options = NULL;
+    AVInputFormat* m_input_format = NULL;
+    int m_sample_rate{DEFAULT_SAMPLE_RATE};
+    int m_bit_rate{DEFAULT_BIT_RATE};
+
+    public:
+
+    FFMPEGString(std::string string);
+    const char* url(){return (m_source_url!="" ? m_source_url:m_destination_url).c_str();}
+    int sample_rate(){return m_sample_rate;}
+    int bit_rate(){return m_bit_rate;}
+    AVDictionary* options(){return m_options;}
+    AVInputFormat* input_format(){return m_input_format;}
 };
 
 #endif
