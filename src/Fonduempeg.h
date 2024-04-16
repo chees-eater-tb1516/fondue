@@ -114,7 +114,7 @@ class OutputStream
         AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
 
         /*encodes and muxes one frame of audio data*/
-        int write_frame (InputStream* source);
+        int write_frame (InputStream& source);
 
         /*closes the file and does other end of stream tasks*/
         void finish_streaming ();
@@ -170,6 +170,9 @@ class InputStream
 
         /*alternative 'no source' constructor*/
         InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode);
+
+        /*null constructor*/
+        InputStream();
         
         /*destructor*/
         ~InputStream();

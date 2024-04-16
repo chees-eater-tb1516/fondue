@@ -134,6 +134,11 @@ InputStream::InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes so
 
 }
 
+InputStream::InputStream()
+{
+    
+}
+
 
 InputStream::~InputStream()
 {

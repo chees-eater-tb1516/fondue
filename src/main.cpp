@@ -4,7 +4,7 @@ ControlFlags g_flags;
 std::mutex flags_mtx;
 std::mutex new_source_mtx;
 /* takes data from one source and sends it to the output url*/
-void continue_streaming (InputStream* source, OutputStream& sink, 
+void continue_streaming (InputStream& source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time)
 {
     std::unique_lock<std::mutex> lock (flags_mtx);
@@ -13,15 +13,15 @@ void continue_streaming (InputStream* source, OutputStream& sink,
         lock.unlock();
         try
         {
-            source->get_one_output_frame();
+            source.get_one_output_frame();
             sink.write_frame(source);
-            source->sleep(end_time);          
+            source.sleep(end_time);          
         }
 
         catch (const char* exception)
         {
             std::cout<<exception<<": changing to default source\n";
-            source->init_default_source();
+            source.init_default_source();
         }
 
         lock.lock();
@@ -31,23 +31,23 @@ void continue_streaming (InputStream* source, OutputStream& sink,
 }
 /*takes data from the current and incoming sources, crossfades them and sends data to the output URL. 
 * returns a pointer to the incoming stream if the crossfade completes successfully or a pointer to the outgoing stream (immeadiately) in case of any errors*/
-InputStream* crossfade (InputStream* source, InputStream* new_input, 
+InputStream& crossfade (InputStream& source, InputStream& new_input, 
                         OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time)
 {
     int fade_time_remaining = DEFAULT_FADE_MS;
     const int fade_time = DEFAULT_FADE_MS;
-    source->init_crossfade();
-    new_input->init_crossfade();
+    source.init_crossfade();
+    new_input.init_crossfade();
     std::lock_guard<std::mutex> lock (flags_mtx);
     while (fade_time_remaining > 0 && !g_flags.stop)
     {
         /*attempt to decode both input and new input frames and crossfade together*/
         try
         {
-            new_input->get_one_output_frame();
-            source->crossfade_frame (new_input->get_frame(), fade_time_remaining, fade_time);
+            new_input.get_one_output_frame();
+            source.crossfade_frame (new_input.get_frame(), fade_time_remaining, fade_time);
             sink.write_frame(source);
-            source->sleep(end_time);
+            source.sleep(end_time);
         }
 
         /*if anything fails*/
@@ -57,11 +57,11 @@ InputStream* crossfade (InputStream* source, InputStream* new_input,
             return source;
         }
     }
-    new_input->end_crossfade();
+    new_input.end_crossfade();
     return new_input;
 }
 
-void audio_processing (InputStream* source, InputStream* &new_source, 
+void audio_processing (InputStream &source, InputStream &new_source, 
                         OutputStream &sink)
 {
     std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
@@ -90,7 +90,7 @@ void audio_processing (InputStream* source, InputStream* &new_source,
 }
 
 
-void control(InputStream* &new_source, const OutputStream &sink)
+void control(InputStream &new_source, const OutputStream &sink)
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
@@ -137,22 +137,25 @@ int main ()
 
     avdevice_register_all();
     OutputStream sink{output_prompt};
-    InputStream* source;
+    InputStream source {};
+    InputStream new_source {};
 
     try
     {
-        source = new InputStream (input_prompt, sink.get_output_codec_context(),
-                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise);
+        /*shallow-copying does not have desired effect. needs fixing*/
+        source = InputStream {input_prompt, sink.get_output_codec_context(),
+                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise};
     }
     catch (const char* exception)
     {
         std::cout<<exception<<": failed to correctly access input, using default source\n";
-        source = new InputStream (sink.get_output_codec_context(), DefaultSourceModes::white_noise);
+        /*ditto shallow-copying does not have desired effect. needs fixing*/
+        source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
     }
     
     
-    InputStream* new_source = NULL;
-    std::thread audioThread(audio_processing, source, std::ref(new_source), std::ref(sink));
+    
+    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
     std::thread controlThread(control, std::ref(new_source), sink);
 
     audioThread.join();
