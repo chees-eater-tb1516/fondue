@@ -130,18 +130,13 @@ void control(InputStream* &new_source, const OutputStream &sink)
 
 int main ()
 {
-
-    
     FFMPEGString input_prompt{"-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3"};
     //FFMPEGString input_prompt{"-f alsa -i hw:1,0 -ar 44100 -ac 2"};
     FFMPEGString output_prompt{"test.mp3"};
     //FFMPEGString output_prompt{"-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"}
 
     avdevice_register_all();
-
-    
     OutputStream sink{output_prompt};
-
     InputStream* source;
 
     try
