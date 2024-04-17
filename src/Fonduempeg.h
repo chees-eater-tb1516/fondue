@@ -36,6 +36,8 @@ extern "C"{
 #include<functional>
 #include<mutex>
 #include<cstring>
+#include<memory>
+#include<utility>
 
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
@@ -82,7 +84,7 @@ class OutputStream
 {
     private:
         const char* m_destination_url = NULL;
-        AVFormatContext* m_output_format_context = NULL;
+        AVFormatContext* m_output_format_context = NULL; 
         const AVOutputFormat* m_output_format = NULL; 
         AVCodecContext* m_output_codec_context = NULL;
         const AVCodec* m_output_codec = NULL;

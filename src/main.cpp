@@ -58,6 +58,7 @@ InputStream& crossfade (InputStream& source, InputStream& new_input,
         }
     }
     new_input.end_crossfade();
+    /*return an rvalue reference here??*/
     return new_input;
 }
 
@@ -80,6 +81,7 @@ void audio_processing (InputStream &source, InputStream &new_source,
         {  
             lock.unlock();
             std::unique_lock<std::mutex> lock2 (new_source_mtx);
+            /*would be good to move rather than copy new_source to source here*/
             source = crossfade(source, new_source, sink, end_time);
             lock2.unlock();
             lock.lock();
