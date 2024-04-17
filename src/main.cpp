@@ -98,7 +98,7 @@ void control(InputStream &new_source, const OutputStream &sink)
     int count {};
     AVDictionary* input_options = NULL;
     const char* input_url = "/home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3";
-    AVCodecContext* output_codec_ctx = sink.get_output_codec_context();
+    AVCodecContext output_codec_ctx = sink.get_output_codec_context();
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
@@ -139,29 +139,31 @@ int main ()
 
     avdevice_register_all();
     OutputStream sink{output_prompt};
-    InputStream source {};
-    InputStream new_source {};
+    // InputStream source {input_prompt, sink.get_output_codec_context(), SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    // InputStream new_source {};
+    InputStream {input_prompt, sink.get_output_codec_context(),
+                                         SourceTimingModes::realtime, DefaultSourceModes::white_noise};
 
-    try
-    {
-        /*shallow-copying does not have desired effect. needs fixing*/
-        source = InputStream {input_prompt, sink.get_output_codec_context(),
-                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise};
-    }
-    catch (const char* exception)
-    {
-        std::cout<<exception<<": failed to correctly access input, using default source\n";
-        /*ditto shallow-copying does not have desired effect. needs fixing*/
-        source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
-    }
+    // try
+    // {
+    //     /*shallow-copying does not have desired effect. needs fixing*/
+    //     source = InputStream {input_prompt, sink.get_output_codec_context(),
+    //                                     SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    // }
+    // catch (const char* exception)
+    // {
+    //     std::cout<<exception<<": failed to correctly access input, using default source\n";
+    //     /*ditto shallow-copying does not have desired effect. needs fixing*/
+    //     source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
+    // }
     
     
     
-    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
-    std::thread controlThread(control, std::ref(new_source), sink);
+    // std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
+    // std::thread controlThread(control, std::ref(new_source), sink);
 
-    audioThread.join();
-    controlThread.join();
+    // audioThread.join();
+    // controlThread.join();
 
     
     return 0;

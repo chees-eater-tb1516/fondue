@@ -83,7 +83,7 @@ class FFMPEGString;
 class OutputStream
 {
     private:
-        const char* m_destination_url = NULL;
+        std::string m_destination_url{};
         AVFormatContext* m_output_format_context = NULL; 
         const AVOutputFormat* m_output_format = NULL; 
         AVCodecContext* m_output_codec_context = NULL;
@@ -100,7 +100,7 @@ class OutputStream
 
     public: 
         /*normal constructor*/
-        OutputStream(const char* destination_url, AVDictionary* output_options, 
+        OutputStream(std::string destination_url, AVDictionary* output_options, 
             int sample_rate, int bit_rate);
         
         /*alternative constructor from ffmpeg prompt*/
@@ -113,7 +113,7 @@ class OutputStream
 
         void set_frame(AVFrame* frame){m_frame = frame;}
 
-        AVCodecContext* get_output_codec_context() const {return m_output_codec_context;}
+        AVCodecContext& get_output_codec_context() const {return *m_output_codec_context;}
 
         /*encodes and muxes one frame of audio data*/
         int write_frame (InputStream& source);
@@ -134,13 +134,13 @@ class OutputStream
 class InputStream
 {
     private:
-        const char* m_source_url = NULL;
+        std::string m_source_url{};
         AVFormatContext* m_format_ctx = NULL;
         AVDictionary* m_options;
         AVCodecContext* m_input_codec_ctx = NULL;
         /*needs reference to the output codec context in order to be 
         able to prepare output frames in the correct format*/
-        AVCodecContext* m_output_codec_ctx = NULL;
+        AVCodecContext m_output_codec_ctx;
         AVFrame* m_frame = NULL;
         AVFrame* m_temp_frame = NULL;       
         AVPacket* m_pkt = NULL;
@@ -148,12 +148,12 @@ class InputStream
         int m_ret{};
         struct SwrContext* m_swr_ctx;
         struct SwrContext* m_swr_ctx_xfade;
-        int m_dst_nb_samples;
-        int m_default_frame_size;
-        int m_output_frame_size;
-        int m_actual_nb_samples;
+        int m_dst_nb_samples{};
+        int m_default_frame_size{};
+        int m_output_frame_size{};
+        int m_actual_nb_samples{};
         AVAudioFifo* m_queue = NULL;
-        int m_number_buffered_samples = 0;
+        int m_number_buffered_samples{};
         std::chrono::duration<double> m_loop_duration {};
         SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
         bool m_source_valid = true;
@@ -163,24 +163,33 @@ class InputStream
 
     public:
         /*normal constructor*/
-        InputStream(const char* source_url, AVInputFormat* format, AVCodecContext* output_codec_ctx, AVDictionary* options, 
+        InputStream(std::string source_url, AVInputFormat* format, AVCodecContext& output_codec_ctx, AVDictionary* options, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative constructor from ffmpeg prompt*/
-        InputStream(FFMPEGString &prompt_string, AVCodecContext* output_codec_ctx, 
+        InputStream(FFMPEGString &prompt_string, AVCodecContext& output_codec_ctx, 
                     SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative 'no source' constructor*/
-        InputStream(AVCodecContext* output_codec_ctx, DefaultSourceModes source_mode);
+        InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes source_mode);
 
-        /*null constructor*/
+        /*default constructor*/
         InputStream();
-        
+
         /*destructor*/
         ~InputStream();
-        
 
-        void cleanup();
+        /*copy constructor*/
+        InputStream(const InputStream& input_stream);
+
+        /*copy assignment operator*/
+        InputStream& operator= (const InputStream& input_stream);
+
+        /*move constructor*/
+        InputStream(InputStream&& input_stream);
+
+        /*move assignment operator*/
+        InputStream& operator= (InputStream&& input_stream);
 
         /*get one frame of raw audio from the input resource*/
         int decode_one_input_frame_recursive();
@@ -257,7 +266,7 @@ class FFMPEGString
     public:
 
     FFMPEGString(std::string string);
-    const char* url(){return (m_source_url!="" ? m_source_url:m_destination_url).c_str();}
+    std::string url(){return (m_source_url!="" ? m_source_url:m_destination_url);}
     int sample_rate(){return m_sample_rate;}
     int bit_rate(){return m_bit_rate;}
     AVDictionary* options(){return m_options;}

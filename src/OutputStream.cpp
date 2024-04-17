@@ -3,7 +3,7 @@
 
 
 
-OutputStream::OutputStream(const char* destination_url, AVDictionary* output_options, 
+OutputStream::OutputStream(std::string destination_url, AVDictionary* output_options, 
                             int sample_rate, int bit_rate):
 
     m_destination_url {destination_url},
@@ -19,11 +19,11 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
     const char* content_type_s = content_type ? content_type->value : NULL;
     /*work out the output format from the details passed in: short name, url and mime type*/
     m_output_format = av_guess_format(format_s, 
-                                        m_destination_url, content_type_s);
+                                        m_destination_url.c_str(), content_type_s);
 
     /* allocate the output media context , guesses format based on filename if format is NULL*/
     
-    avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url);
+    avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url.c_str());
 
     if (!m_output_format_context)
     {
@@ -147,14 +147,14 @@ OutputStream::OutputStream(const char* destination_url, AVDictionary* output_opt
         exit(1);
     }
 
-    av_dump_format(m_output_format_context, 0, m_destination_url, 1);
+    av_dump_format(m_output_format_context, 0, m_destination_url.c_str(), 1);
 
         /* open the output file, if needed */
     if (!(m_output_format->flags & AVFMT_NOFILE)) {
-        m_ret = avio_open(&m_output_format_context->pb, m_destination_url, AVIO_FLAG_WRITE);
+        m_ret = avio_open(&m_output_format_context->pb, m_destination_url.c_str(), AVIO_FLAG_WRITE);
         if (m_ret < 0) 
         {
-            fprintf(stderr, "Could not open '%s'\n", m_destination_url);
+            fprintf(stderr, "Could not open '%s'\n", m_destination_url.c_str());
             cleanup();
             exit(1);
         }
