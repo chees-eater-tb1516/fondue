@@ -135,15 +135,15 @@ class InputStream
 {
     private:
         std::string m_source_url{};
-        AVFormatContext* m_format_ctx = NULL;
+        AVFormatContext* m_format_ctx{};
         AVDictionary* m_options;
-        AVCodecContext* m_input_codec_ctx = NULL;
+        AVCodecContext* m_input_codec_ctx{};
         /*needs reference to the output codec context in order to be 
         able to prepare output frames in the correct format*/
         AVCodecContext m_output_codec_ctx;
-        AVFrame* m_frame = NULL;
-        AVFrame* m_temp_frame = NULL;       
-        AVPacket* m_pkt = NULL;
+        AVFrame* m_frame{};
+        AVFrame* m_temp_frame{};       
+        AVPacket* m_pkt{};
         bool m_got_frame = false;
         int m_ret{};
         struct SwrContext* m_swr_ctx;
@@ -152,7 +152,7 @@ class InputStream
         int m_default_frame_size{};
         int m_output_frame_size{};
         int m_actual_nb_samples{};
-        AVAudioFifo* m_queue = NULL;
+        AVAudioFifo* m_queue{};
         int m_number_buffered_samples{};
         std::chrono::duration<double> m_loop_duration {};
         SourceTimingModes m_timing_mode = SourceTimingModes::realtime;
@@ -186,10 +186,10 @@ class InputStream
         InputStream& operator= (const InputStream& input_stream);
 
         /*move constructor*/
-        InputStream(InputStream&& input_stream);
+        InputStream(InputStream&& input_stream) noexcept;
 
         /*move assignment operator*/
-        InputStream& operator= (InputStream&& input_stream);
+        InputStream& operator= (InputStream&& input_stream) noexcept;
 
         /*get one frame of raw audio from the input resource*/
         int decode_one_input_frame_recursive();
@@ -247,6 +247,12 @@ class InputStream
 
         /*sleeps the thread for the correct amount of time to ensure real time operation*/
         void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
+
+        /*boilerplate for copying resampling contexts*/
+        void deepcopy_swr_context(struct SwrContext** dst, struct SwrContext* src);
+        
+        /*boilerplate for copying audio samples queue*/
+        void deepcopy_audio_fifo(AVAudioFifo* src);
 
     
 };

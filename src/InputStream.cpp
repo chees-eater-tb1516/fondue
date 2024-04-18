@@ -48,9 +48,6 @@ InputStream::InputStream(std::string source_url, AVInputFormat* format, AVCodecC
         throw "Input: could not allocate packet";
     }
 
-    
-   
-
     m_temp_frame = alloc_frame(m_input_codec_ctx);
 
         /* create resampling contexts */
@@ -142,8 +139,8 @@ InputStream::InputStream()
 
 InputStream::~InputStream()
 {
-    avcodec_free_context(&m_input_codec_ctx);
     avformat_close_input(&m_format_ctx);
+    avcodec_free_context(&m_input_codec_ctx);
     av_packet_free(&m_pkt);
     av_frame_free(&m_frame);
     av_frame_free(&m_temp_frame);
@@ -168,7 +165,28 @@ InputStream::InputStream(const InputStream& input_stream):
     m_source_valid {input_stream.m_source_valid},
     m_source_mode {input_stream.m_source_mode}
 {
-    /*deal with the remaining members here*/
+    m_format_ctx = avformat_alloc_context();
+    *m_format_ctx = *(input_stream.m_format_ctx);
+    const AVCodec* dec = avcodec_find_decoder(m_format_ctx->streams[0]->codecpar->codec_id);
+    m_input_codec_ctx = avcodec_alloc_context3(dec);
+    *m_input_codec_ctx = *(input_stream.m_input_codec_ctx);
+    int ret{avcodec_open2(m_input_codec_ctx, dec, NULL)};
+    m_pkt = av_packet_alloc();
+    *m_pkt = *(input_stream.m_pkt);
+    m_frame = av_frame_alloc();
+    *m_frame = *(input_stream.m_frame);
+    m_temp_frame = av_frame_alloc();
+    *m_temp_frame = *(input_stream.m_temp_frame);
+    m_swr_ctx = swr_alloc();
+    m_swr_ctx_xfade = swr_alloc();
+    deepcopy_swr_context(&m_swr_ctx, input_stream.m_swr_ctx);
+    deepcopy_swr_context(&m_swr_ctx_xfade, input_stream.m_swr_ctx_xfade);
+    ret = swr_init(m_swr_ctx);
+    ret = swr_init(m_swr_ctx_xfade);
+    m_queue = av_audio_fifo_alloc(m_output_codec_ctx.sample_fmt,
+                                    m_output_codec_ctx.ch_layout.nb_channels, 1);
+    deepcopy_audio_fifo(input_stream.m_queue);
+
 }
 
 InputStream& InputStream::operator=(const InputStream& input_stream)
@@ -683,6 +701,46 @@ int InputStream::get_frame_length_milliseconds()
 void InputStream::sleep(std::chrono::_V2::steady_clock::time_point &end_time) const
 {
     fondue_sleep(end_time, m_loop_duration, m_timing_mode);
+}
+
+void InputStream::deepcopy_swr_context(struct SwrContext** dst, struct SwrContext* src)
+{
+    AVChannelLayout in_chlayout{};
+    int64_t in_sample_rate{};
+    AVSampleFormat in_sample_fmt{};
+    AVChannelLayout out_chlayout{};
+    int64_t out_sample_rate{};
+    AVSampleFormat out_sample_fmt{};
+
+    
+    av_opt_get_chlayout(src, "in_chlayout", 0, &in_chlayout);
+    av_opt_get_int(src, "in_sample_rate", 0, &in_sample_rate);
+    av_opt_get_sample_fmt(src, "in_sample_fmt", 0, &in_sample_fmt);
+    av_opt_get_chlayout(src, "out_chlayout", 0, &out_chlayout);
+    av_opt_get_int(src, "out_sample_rate", 0, &out_sample_rate);
+    av_opt_get_sample_fmt(src, "out_sample_fmt", 0, &out_sample_fmt);
+
+    av_opt_set_chlayout  (dst, "in_chlayout",       &in_chlayout,      0);
+    av_opt_set_int       (dst, "in_sample_rate",     in_sample_rate,    0);
+    av_opt_set_sample_fmt(dst, "in_sample_fmt",      in_sample_fmt,     0);
+    av_opt_set_chlayout  (dst, "out_chlayout",      &out_chlayout,      0);
+    av_opt_set_int       (dst, "out_sample_rate",    out_sample_rate,    0);
+    av_opt_set_sample_fmt(dst, "out_sample_fmt",     out_sample_fmt,     0);
+
+}
+
+void InputStream::deepcopy_audio_fifo(AVAudioFifo* src)
+{
+    int queue_length {av_audio_fifo_size(src)};
+    AVFrame* temp_frame = av_frame_alloc();
+    temp_frame->nb_samples = queue_length;
+    temp_frame->sample_rate = m_output_codec_ctx.sample_rate;
+    temp_frame->format = m_output_codec_ctx.sample_fmt;
+    av_frame_get_buffer(temp_frame, 0);
+    av_audio_fifo_peek(src, (void**)temp_frame->data, queue_length);
+    int x {av_audio_fifo_realloc(m_queue, queue_length)};
+    x = av_audio_fifo_write(m_queue, (void**)temp_frame->data, queue_length);
+
 }
 
 

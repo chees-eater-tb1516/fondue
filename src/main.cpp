@@ -141,29 +141,30 @@ int main ()
     OutputStream sink{output_prompt};
     // InputStream source {input_prompt, sink.get_output_codec_context(), SourceTimingModes::realtime, DefaultSourceModes::white_noise};
     // InputStream new_source {};
-    InputStream {input_prompt, sink.get_output_codec_context(),
-                                         SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    // InputStream source{input_prompt, sink.get_output_codec_context(),
+    //                                      SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    InputStream source{};
+    InputStream new_source{};
 
     // try
     // {
-    //     /*shallow-copying does not have desired effect. needs fixing*/
+    //     
     //     source = InputStream {input_prompt, sink.get_output_codec_context(),
     //                                     SourceTimingModes::realtime, DefaultSourceModes::white_noise};
     // }
     // catch (const char* exception)
     // {
     //     std::cout<<exception<<": failed to correctly access input, using default source\n";
-    //     /*ditto shallow-copying does not have desired effect. needs fixing*/
     //     source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
     // }
     
     
     
-    // std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
-    // std::thread controlThread(control, std::ref(new_source), sink);
+    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
+    std::thread controlThread(control, std::ref(new_source), sink);
 
-    // audioThread.join();
-    // controlThread.join();
+    audioThread.join();
+    controlThread.join();
 
     
     return 0;
