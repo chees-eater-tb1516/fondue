@@ -15,41 +15,36 @@ void continue_streaming (InputStream& source, OutputStream& sink,
         {
             source.get_one_output_frame();
             sink.write_frame(source);
-            source.sleep(end_time);
-                 
+            source.sleep(end_time);        
         }
 
         catch (const char* exception)
         {
             std::cout<<exception<<": changing to default source\n";
-            InputStream default_source {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
-            source = default_source;
-            /*copy assignment works as expected!*/
-        }
-
-        
+            source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
+        }   
         lock.lock();
     } 
 
    
 }
 /*takes data from the current and incoming sources, crossfades them and sends data to the output URL. 
-* returns a pointer to the incoming stream if the crossfade completes successfully or a pointer to the outgoing stream (immeadiately) in case of any errors*/
-InputStream& crossfade (InputStream& source, InputStream& new_input, 
+* returns a reference to the incoming stream if the crossfade completes successfully or a pointer to the outgoing stream (immeadiately) in case of any errors*/
+InputStream&& crossfade (InputStream& source, InputStream& new_source, 
                         OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time)
 {
     int fade_time_remaining = DEFAULT_FADE_MS;
     const int fade_time = DEFAULT_FADE_MS;
     source.init_crossfade();
-    new_input.init_crossfade();
+    new_source.init_crossfade();
     std::lock_guard<std::mutex> lock (flags_mtx);
     while (fade_time_remaining > 0 && !g_flags.stop)
     {
         /*attempt to decode both input and new input frames and crossfade together*/
         try
         {
-            new_input.get_one_output_frame();
-            source.crossfade_frame (new_input.get_frame(), fade_time_remaining, fade_time);
+            new_source.get_one_output_frame();
+            source.crossfade_frame (new_source.get_frame(), fade_time_remaining, fade_time);
             sink.write_frame(source);
             source.sleep(end_time);
         }
@@ -58,12 +53,11 @@ InputStream& crossfade (InputStream& source, InputStream& new_input,
         catch (const char* exception)
         {
             std::cout<<exception<<": crossfading failed\n";
-            return source;
+            return std::move(source);
         }
     }
-    new_input.end_crossfade();
-    /*return an rvalue reference here??*/
-    return new_input;
+    new_source.end_crossfade();
+    return std::move(new_source);
 }
 
 void audio_processing (InputStream &source, InputStream &new_source, 
@@ -147,7 +141,7 @@ int main ()
     InputStream new_source{};
     InputStream source {input_prompt, sink.get_output_codec_context(),
                                        SourceTimingModes::freetime, DefaultSourceModes::white_noise};
-    // InputStream source {InputStream{sink.get_output_codec_context(), DefaultSourceModes::white_noise}};
+    // InputStream source {std::move(InputStream{sink.get_output_codec_context(), DefaultSourceModes::white_noise})};
     //source = source1;
 
     // try

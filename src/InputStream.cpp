@@ -191,7 +191,7 @@ InputStream::InputStream(const InputStream& input_stream):
     
     m_temp_frame = av_frame_alloc();
     deepcopy_frame(m_temp_frame, input_stream.m_temp_frame);
-    
+
     m_swr_ctx = swr_alloc();
     m_swr_ctx_xfade = swr_alloc();
     deepcopy_swr_context(&m_swr_ctx, input_stream.m_swr_ctx);
@@ -247,7 +247,7 @@ InputStream& InputStream::operator=(const InputStream& input_stream)
 
     if (input_stream.m_pkt)
     {
-         av_packet_free(&m_pkt);
+        av_packet_free(&m_pkt);
         m_pkt = av_packet_alloc();
         *m_pkt = *(input_stream.m_pkt);
     }
@@ -297,9 +297,25 @@ InputStream::InputStream(InputStream&& input_stream) noexcept:
     m_loop_duration {input_stream.m_loop_duration},
     m_timing_mode {input_stream.m_timing_mode},
     m_source_valid {input_stream.m_source_valid},
-    m_source_mode {input_stream.m_source_mode}
+    m_source_mode {input_stream.m_source_mode},
+    m_format_ctx {input_stream.m_format_ctx},
+    m_input_codec_ctx {input_stream.m_input_codec_ctx},
+    m_frame {input_stream.m_frame},
+    m_temp_frame {input_stream.m_temp_frame},
+    m_pkt {input_stream.m_pkt},
+    m_swr_ctx {input_stream.m_swr_ctx},
+    m_swr_ctx_xfade {input_stream.m_swr_ctx_xfade},
+    m_queue {input_stream.m_queue}
+
 {
-    /*deal with the remaining members here*/
+    input_stream.m_format_ctx = nullptr;
+    input_stream.m_input_codec_ctx = nullptr;
+    input_stream.m_frame = nullptr;
+    input_stream.m_temp_frame = nullptr;
+    input_stream.m_pkt = nullptr;
+    input_stream.m_swr_ctx = nullptr;
+    input_stream.m_swr_ctx_xfade = nullptr;
+    input_stream.m_queue = nullptr;
 }
 
 InputStream& InputStream::operator=(InputStream&& input_stream) noexcept
@@ -321,8 +337,23 @@ InputStream& InputStream::operator=(InputStream&& input_stream) noexcept
     m_timing_mode = input_stream.m_timing_mode;
     m_source_valid = input_stream.m_source_valid;
     m_source_mode = input_stream.m_source_mode;
+    m_format_ctx = input_stream.m_format_ctx;
+    m_input_codec_ctx = input_stream.m_input_codec_ctx;
+    m_frame = input_stream.m_frame;
+    m_temp_frame = input_stream.m_temp_frame;
+    m_pkt = input_stream.m_pkt;
+    m_swr_ctx = input_stream.m_swr_ctx;
+    m_swr_ctx_xfade = input_stream.m_swr_ctx_xfade;
+    m_queue = input_stream.m_queue;
     
-    /*deal with the remaining members here*/
+    input_stream.m_format_ctx = nullptr;
+    input_stream.m_input_codec_ctx = nullptr;
+    input_stream.m_frame = nullptr;
+    input_stream.m_temp_frame = nullptr;
+    input_stream.m_pkt = nullptr;
+    input_stream.m_swr_ctx = nullptr;
+    input_stream.m_swr_ctx_xfade = nullptr;
+    input_stream.m_queue = nullptr;
 
     return *this;
 
