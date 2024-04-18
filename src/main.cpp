@@ -3,6 +3,7 @@
 ControlFlags g_flags;
 std::mutex flags_mtx;
 std::mutex new_source_mtx;
+
 /* takes data from one source and sends it to the output url*/
 void continue_streaming (InputStream& source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time)
@@ -24,12 +25,12 @@ void continue_streaming (InputStream& source, OutputStream& sink,
             source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
         }   
         lock.lock();
-    } 
-
-   
+    }    
 }
+
 /*takes data from the current and incoming sources, crossfades them and sends data to the output URL. 
-* returns a reference to the incoming stream if the crossfade completes successfully or a pointer to the outgoing stream (immeadiately) in case of any errors*/
+* returns a (rvalue) reference to the incoming stream if the crossfade completes successfully 
+* or a (rvalue) reference to the outgoing stream (immeadiately) in case of any errors*/
 InputStream&& crossfade (InputStream& source, InputStream& new_source, 
                         OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time)
 {
@@ -73,13 +74,11 @@ void audio_processing (InputStream &source, InputStream &new_source,
             continue_streaming(source, sink, end_time);
             lock.lock();
             continue;
-        }
-            
+        }            
         else 
         {  
             lock.unlock();
             std::unique_lock<std::mutex> lock2 (new_source_mtx);
-            /*would be good to move rather than copy new_source to source here*/
             source = crossfade(source, new_source, sink, end_time);
             lock2.unlock();
             lock.lock();
@@ -137,26 +136,18 @@ int main ()
 
     avdevice_register_all();
     OutputStream sink{output_prompt};
-
+    InputStream source {};
     InputStream new_source{};
-    InputStream source {input_prompt, sink.get_output_codec_context(),
-                                       SourceTimingModes::freetime, DefaultSourceModes::white_noise};
-    // InputStream source {std::move(InputStream{sink.get_output_codec_context(), DefaultSourceModes::white_noise})};
-    //source = source1;
-
-    // try
-    // {
-    //     
-    //     source = InputStream {input_prompt, sink.get_output_codec_context(),
-    //                                     SourceTimingModes::realtime, DefaultSourceModes::white_noise};
-    // }
-    // catch (const char* exception)
-    // {
-    //     std::cout<<exception<<": failed to correctly access input, using default source\n";
-    //     source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
-    // }
-    
-    
+    try
+    {    
+        source = InputStream {input_prompt, sink.get_output_codec_context(),
+                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    }
+    catch (const char* exception)
+    {
+        std::cout<<exception<<": failed to correctly access input, switching to default source\n";
+        source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
+    }
     
     std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
     std::thread controlThread(control, std::ref(new_source), sink);

@@ -102,15 +102,14 @@ InputStream::InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes so
     {
         if (av_frame_get_buffer(m_temp_frame,0) < 0)
         {
-            
             throw "Default input: error allocating a temporary audio buffer";
         }
     }
 
     /*allocate the resampling context*/
     m_swr_ctx = swr_alloc();
-    if (!m_swr_ctx) {
-        
+    if (!m_swr_ctx) 
+    {
         throw "Default input: could not allocate a resampler context"; 
     }
 
@@ -123,7 +122,6 @@ InputStream::InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes so
     /* initialize the resampling context */
     if ((swr_init(m_swr_ctx)) < 0) 
     {
-        
         throw "Default input: failed to initialise the resampler context";
     }
 
@@ -134,12 +132,10 @@ InputStream::InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes so
 
 InputStream::InputStream()
 {
-
 }
 
 InputStream::~InputStream()
 {
-   
     avformat_close_input(&m_format_ctx);
     avcodec_free_context(&m_input_codec_ctx);
     av_packet_free(&m_pkt);
@@ -165,6 +161,7 @@ InputStream::InputStream(const InputStream& input_stream):
     m_timing_mode {input_stream.m_timing_mode},
     m_source_valid {input_stream.m_source_valid},
     m_source_mode {input_stream.m_source_mode}
+
 {
     if (input_stream.m_format_ctx)
     {
@@ -484,9 +481,7 @@ bool InputStream::get_one_output_frame()
             }
         }
 
-        /*resample to achieve the output sample format and channel configuration*/
-
-        
+        /*resample to achieve the output sample format and channel configuration*/        
         /*since not changing the sample rate the number of samples shouldn't change*/
         m_ret = swr_convert(m_swr_ctx, m_frame->data, m_temp_frame->nb_samples,
                         (const uint8_t **)m_temp_frame->data, m_temp_frame->nb_samples);
@@ -496,10 +491,7 @@ bool InputStream::get_one_output_frame()
             printf("error resampling frame: %s\n", av_error_to_string(m_ret));
             throw "Default input: error resampling frame";
         }
-        
-
         return true;
-
     }
     
     
@@ -559,8 +551,6 @@ bool InputStream::get_one_output_frame()
     return true;
   
 }
-
-
 
 bool InputStream::crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time)
 {
@@ -631,11 +621,7 @@ int InputStream::open_codec_context(enum AVMediaType type)
                     av_get_media_type_string(type));
             return ret;
         }
-       
-    
- 
     return 0;
-
 }
 
 AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
@@ -688,37 +674,6 @@ void InputStream::end_crossfade()
     {
         throw "end crossfading: failed to initialise the resampler context";
     }
-}
-
-void InputStream::init_default_source()
-{
-    m_source_valid = false;
-    AVChannelLayout default_channel_layout = AV_CHANNEL_LAYOUT_STEREO;
-    av_opt_set_chlayout  (m_swr_ctx, "in_chlayout",       &default_channel_layout,      0);
-    av_opt_set_int       (m_swr_ctx, "in_sample_rate",     m_output_codec_ctx.sample_rate,    0);
-    av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16,     0);
-
-    av_frame_free(&m_temp_frame);
-    m_temp_frame = av_frame_alloc();
-    m_temp_frame->format = AV_SAMPLE_FMT_S16;
-    av_channel_layout_copy(&m_temp_frame->ch_layout, &default_channel_layout);
-    m_temp_frame->sample_rate = m_output_codec_ctx.sample_rate;
-    m_temp_frame->nb_samples = m_output_frame_size;
-
-
-    if (m_output_frame_size)
-    {
-        if (av_frame_get_buffer(m_temp_frame,0) < 0)
-        {
-            throw "Default input: error allocating a temporary audio buffer";
-        }
-    }
-    m_ret = swr_init(m_swr_ctx);
-    if (m_ret < 0) 
-    {
-        throw "switching to default source: failed to initialise the resampler context";
-    }
-
 }
 
 void InputStream::set_resampler_options(SwrContext* swr_ctx, AVCodecContext* input_codec_ctx, AVCodecContext* output_codec_ctx)

@@ -48,7 +48,8 @@ extern "C"{
 
 enum class DefaultSourceModes {silence, white_noise};
 
-/*overload the unary + operator to cast the enum class DefaultSourceModes to int for e.g. switch statements*/
+/*overload the unary + operator to cast the enum class DefaultSourceModes 
+* to int for e.g. switch statements*/
 constexpr auto operator+(DefaultSourceModes m) noexcept
 {
     return static_cast<std::underlying_type_t<DefaultSourceModes>>(m);
@@ -56,7 +57,8 @@ constexpr auto operator+(DefaultSourceModes m) noexcept
 
 enum class SourceTimingModes {realtime, freetime};
 
-/*overload the unary + operator to cast the enum class SourceTimingModes to int for e.g. switch statements*/
+/*overload the unary + operator to cast the enum class SourceTimingModes 
+* to int for e.g. switch statements*/
 constexpr auto operator+(SourceTimingModes m) noexcept
 {
     return static_cast<std::underlying_type_t<SourceTimingModes>>(m);
@@ -73,7 +75,8 @@ char* av_error_to_string(int error_code);
 
 struct timespec get_timespec_from_ticks(int ticks);
 
-void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, const std::chrono::duration<double> &loop_duration, const SourceTimingModes& timing_mode);
+void fondue_sleep(std::chrono::_V2::steady_clock::time_point &end_time, 
+        const std::chrono::duration<double> &loop_duration, const SourceTimingModes& timing_mode);
 
 class InputStream;
 
@@ -128,8 +131,9 @@ class OutputStream
     
 };
 
-/*provides methods to demux and decode audio data and provide frames of the correct size, sample rate and sample format for the output stream
-* has the capability to synthesise audio data if the input source is or becomes invalid
+/*provides methods to demux and decode audio data and provide frames of the correct size, 
+* sample rate and sample format for the output stream
+* has the capability to synthesise audio data if the input source is invalid
 * also has the capability to crossfade to a new source*/
 class InputStream
 {
@@ -138,8 +142,6 @@ class InputStream
         AVFormatContext* m_format_ctx{};
         AVDictionary* m_options{};
         AVCodecContext* m_input_codec_ctx{};
-        /*needs reference to the output codec context in order to be 
-        able to prepare output frames in the correct format*/
         AVCodecContext m_output_codec_ctx;
         AVFrame* m_frame{};
         AVFrame* m_temp_frame{};       
@@ -162,6 +164,13 @@ class InputStream
 
 
     public:
+        /*CONSTRUCTORS, DESTRUCTORS, ASSIGNMENT OPERATORS
+        *
+        *
+        * 
+        * 
+        */
+
         /*normal constructor*/
         InputStream(std::string source_url, AVInputFormat* format, AVCodecContext& output_codec_ctx, AVDictionary* options, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
@@ -191,7 +200,43 @@ class InputStream
         /*move assignment operator*/
         InputStream& operator= (InputStream&& input_stream) noexcept;
 
-        /*get one frame of raw audio from the input resource*/
+        /*METHODS INTENDED FOR API USERS
+        *
+        *
+        * 
+        * 
+        * 
+        */
+
+        /*buffer up exactly one frame that matches all the requirements of the output stream*/
+        bool get_one_output_frame();
+
+        /*crossfades two sources, stores one output sized frame, 
+        * call multiple times to complete the whole crossfade*/
+        bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
+
+        /*access the output frame*/
+        AVFrame* get_frame() const {return m_frame;}
+
+        /*configure resamplers for crossfading*/
+        void init_crossfade();
+
+        /*return resamplers to normal streaming settings*/
+        void end_crossfade();
+
+        int get_frame_length_milliseconds();
+
+        /*sleeps the thread for the correct amount of time to ensure real time operation*/
+        void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
+
+        /*METHODS NOT REALLY INTENDED FOR API USERS
+        *
+        *
+        * 
+        * 
+        */
+
+        /*decode and store one frame of raw audio from the input resource*/
         int decode_one_input_frame_recursive();
 
         /*convert the sample format, sample rate and channel layout of the input frame to 
@@ -202,10 +247,13 @@ class InputStream
         /*resample with a specific resampling context*/
         int resample_one_input_frame(SwrContext* swr_ctx);
 
-        /*return exactly one frame that matches all the requirements of the output stream*/
-        bool get_one_output_frame();
-
-        AVFrame* get_frame() const {return m_frame;}
+        /*UNPLEASANT FFMPEG BOILERPLATE ZONE
+        *
+        *
+        * 
+        * 
+        * 
+        */
 
         /*handles boilerplate of the decoder*/
         int open_codec_context(enum AVMediaType type);
@@ -229,31 +277,13 @@ class InputStream
         /*set the resampling context output options*/
         void set_resampler_options(SwrContext* swr_ctx, AVCodecContext* output_codec_ctx);
 
-        /*configure resamplers for crossfading*/
-        void init_crossfade();
-
-        /*return resamplers to normal streaming settings*/
-        void end_crossfade();
-
-        /*makes the InputStream object morph to 'no source' behaviour*/
-        void init_default_source();
-
-        bool get_source_valid() const {return m_source_valid;}
-
-        /*crossfades two sources one frame at a time, call multiple times to complete the whole crossfade*/
-        bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
-
-        int get_frame_length_milliseconds();
-
-        /*sleeps the thread for the correct amount of time to ensure real time operation*/
-        void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
-
         /*boilerplate for copying resampling contexts*/
         void deepcopy_swr_context(struct SwrContext** dst, struct SwrContext* src);
         
         /*boilerplate for copying audio samples queue*/
         void deepcopy_audio_fifo(AVAudioFifo* src);
 
+        /*boilerplate for copying frames*/
         void deepcopy_frame(AVFrame* &dst, AVFrame* src);
 
     
