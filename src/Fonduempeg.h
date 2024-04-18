@@ -86,18 +86,18 @@ class FFMPEGString;
 class OutputStream
 {
     private:
-        std::string m_destination_url{};
-        AVFormatContext* m_output_format_context = NULL; 
-        const AVOutputFormat* m_output_format = NULL; 
-        AVCodecContext* m_output_codec_context = NULL;
-        const AVCodec* m_output_codec = NULL;
-        AVStream* m_audio_stream = NULL;
-        int m_samples_count {0};
-        int m_ret {0};
-        int m_nb_samples{0};
-        AVFrame* m_frame;
-        AVPacket* m_pkt;
-        AVDictionary* m_output_options = NULL;
+        std::string m_destination_url {};
+        AVFormatContext* m_output_format_context {}; 
+        const AVOutputFormat* m_output_format {}; 
+        AVCodecContext* m_output_codec_context {};
+        const AVCodec* m_output_codec {};
+        AVStream* m_audio_stream {};
+        int m_samples_count {};
+        int m_ret {};
+        int m_nb_samples {};
+        AVFrame* m_frame {};
+        AVPacket* m_pkt {};
+        AVDictionary* m_output_options {};
         int m_sample_rate, m_bit_rate;
 
 
@@ -111,8 +111,6 @@ class OutputStream
 
         /*destructor*/
         ~OutputStream();
-
-        void cleanup ();
 
         void set_frame(AVFrame* frame){m_frame = frame;}
 

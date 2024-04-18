@@ -93,27 +93,21 @@ void control(InputStream &new_source, const OutputStream &sink)
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
-    AVDictionary* input_options = NULL;
-    const char* input_url = "/home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3";
+    FFMPEGString new_input {"-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3"};
     AVCodecContext output_codec_ctx = sink.get_output_codec_context();
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
     while (!g_flags.stop)
     {
-        /*if (count == 20)
+        if (count == 20)
         {
-        
-            InputStream* temp_ptr {new InputStream(input_url, output_codec_ctx, input_options, timing_mode, source_mode)};
             std::unique_lock<std::mutex> lock2 (new_source_mtx);
-            new_source = temp_ptr;
+            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
             lock2.unlock();
             std::lock_guard<std::mutex> lock (flags_mtx);
             g_flags.normal_streaming = false;
-            lock2.lock();
-            //delete temp_ptr;
-            //temp_ptr = NULL;
-         
+            lock2.lock();          
         }
 
         if (count == 60)
@@ -121,7 +115,7 @@ void control(InputStream &new_source, const OutputStream &sink)
             std::lock_guard<std::mutex> lock (flags_mtx);
             g_flags.stop = true;
         }
-        count ++;*/
+        count ++;
         std::this_thread::sleep_for(refresh_interval);
     }
 }

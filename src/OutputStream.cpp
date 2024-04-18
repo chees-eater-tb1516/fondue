@@ -4,12 +4,13 @@
 
 
 OutputStream::OutputStream(std::string destination_url, AVDictionary* output_options, 
-                            int sample_rate, int bit_rate):
+            int sample_rate, int bit_rate):
 
     m_destination_url {destination_url},
     m_output_options {output_options},
     m_sample_rate {sample_rate},
     m_bit_rate {bit_rate}
+    
 {
     /*some annoying code to avoid dereferencing a null pointer, surely there is a better way*/
     AVDictionaryEntry* format = av_dict_get(m_output_options, "f", NULL, 0);
@@ -27,8 +28,7 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
 
     if (!m_output_format_context)
     {
-        cleanup();
-        exit(1);
+        
     }
 
 
@@ -41,24 +41,21 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         {
             fprintf(stderr, "Could not find encoder for '%s'\n",
                     avcodec_get_name(m_output_format->audio_codec));
-            cleanup();
-            exit(1);
+     
         }
 
         m_pkt = av_packet_alloc();
         if (!m_pkt) 
         {
             fprintf(stderr, "Could not allocate AVPacket\n");
-            cleanup();
-            exit(1);
+    
         }
 
         m_audio_stream = avformat_new_stream(m_output_format_context, NULL);
         if (!m_audio_stream) 
         {
             fprintf(stderr, "Could not allocate stream\n");
-            cleanup();
-            exit(1);
+      
         }
 
         m_audio_stream->id = m_output_format_context->nb_streams-1;
@@ -67,8 +64,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         if (!m_output_codec_context) 
         {
             fprintf(stderr, "Could not alloc an encoding context\n");
-            cleanup();
-            exit(1);
         }
 
    
@@ -113,8 +108,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     if (m_ret < 0) 
     {
         fprintf(stderr, "Could not open audio codec\n");
-        cleanup();
-        exit(1);
     }
 
     /*ensures a frame with > 0 samples is created even if the codec context has a frame size of zero (implies variable frame size?)*/
@@ -129,8 +122,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     if (!m_frame) 
     {
         fprintf(stderr, "Error allocating an audio frame\n");
-        cleanup();
-        exit(1);
     }
 
     /*copy the frame parameters from the codec context / set them if they need setting*/
@@ -143,8 +134,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     m_ret = avcodec_parameters_from_context(m_audio_stream->codecpar, m_output_codec_context);
     if (m_ret < 0) {
         fprintf(stderr, "Could not copy the stream parameters\n");
-        cleanup();
-        exit(1);
     }
 
     av_dump_format(m_output_format_context, 0, m_destination_url.c_str(), 1);
@@ -155,8 +144,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         if (m_ret < 0) 
         {
             fprintf(stderr, "Could not open '%s'\n", m_destination_url.c_str());
-            cleanup();
-            exit(1);
         }
     }
 
@@ -165,13 +152,12 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     if (m_ret < 0) 
     {
         fprintf(stderr, "Error occurred when opening output file\n");
-        cleanup();
-        exit(1);
-    }
-    
+    }    
+
 }
 
-OutputStream::OutputStream(FFMPEGString &prompt_string):
+
+OutputStream::OutputStream(FFMPEGString& prompt_string):
     OutputStream(prompt_string.url(), prompt_string.options(), prompt_string.sample_rate(), prompt_string.bit_rate())
 { 
     /*uses constructor delegation*/   
@@ -179,20 +165,12 @@ OutputStream::OutputStream(FFMPEGString &prompt_string):
 
 OutputStream::~OutputStream()
 {
-    cleanup();
-}
-
-
-
-
-
-void OutputStream::cleanup()
-{
+    avformat_free_context(m_output_format_context);
     avcodec_free_context(&m_output_codec_context);
     av_frame_free(&m_frame);
     av_packet_free(&m_pkt);
+    
 }
-
 
 int OutputStream::write_frame(InputStream& source)
 {
@@ -207,8 +185,6 @@ int OutputStream::write_frame(InputStream& source)
     {
         fprintf(stderr, "Error sending a frame to the encoder: %s\n",
                 av_error_to_string(m_ret));
-        cleanup();        
-        exit(1);
     }
 
     while (m_ret >= 0) 
@@ -218,8 +194,6 @@ int OutputStream::write_frame(InputStream& source)
             break;
         else if (m_ret < 0) {
             fprintf(stderr, "Error encoding a frame: %s\n", av_error_to_string(m_ret));
-            cleanup();
-            exit(1);
         }
  
         /* rescale output packet timestamp values from codec to stream timebase */
@@ -233,7 +207,6 @@ int OutputStream::write_frame(InputStream& source)
          * This would be different if one used av_write_frame(). */
         if (m_ret < 0) {
             fprintf(stderr, "Error while writing output packet: %s\n", av_error_to_string(m_ret));
-            exit(1);
         }
     }
  
@@ -243,7 +216,6 @@ int OutputStream::write_frame(InputStream& source)
 
 void OutputStream::finish_streaming()
 {
-    cleanup();
     if (!(m_output_format->flags & AVFMT_NOFILE))
         /* Close the output file. */
         avio_closep(&m_output_format_context->pb);
