@@ -136,7 +136,7 @@ class InputStream
     private:
         std::string m_source_url{};
         AVFormatContext* m_format_ctx{};
-        AVDictionary* m_options;
+        AVDictionary* m_options{};
         AVCodecContext* m_input_codec_ctx{};
         /*needs reference to the output codec context in order to be 
         able to prepare output frames in the correct format*/
@@ -146,8 +146,8 @@ class InputStream
         AVPacket* m_pkt{};
         bool m_got_frame = false;
         int m_ret{};
-        struct SwrContext* m_swr_ctx;
-        struct SwrContext* m_swr_ctx_xfade;
+        struct SwrContext* m_swr_ctx {};
+        struct SwrContext* m_swr_ctx_xfade{};
         int m_dst_nb_samples{};
         int m_default_frame_size{};
         int m_output_frame_size{};
@@ -253,6 +253,8 @@ class InputStream
         
         /*boilerplate for copying audio samples queue*/
         void deepcopy_audio_fifo(AVAudioFifo* src);
+
+        void deepcopy_frame(AVFrame* &dst, AVFrame* src);
 
     
 };

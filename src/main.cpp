@@ -15,15 +15,19 @@ void continue_streaming (InputStream& source, OutputStream& sink,
         {
             source.get_one_output_frame();
             sink.write_frame(source);
-            source.sleep(end_time);          
+            source.sleep(end_time);
+                 
         }
 
         catch (const char* exception)
         {
             std::cout<<exception<<": changing to default source\n";
-            source.init_default_source();
+            InputStream default_source {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
+            source = default_source;
+            /*copy assignment works as expected!*/
         }
 
+        
         lock.lock();
     } 
 
@@ -139,12 +143,12 @@ int main ()
 
     avdevice_register_all();
     OutputStream sink{output_prompt};
-    // InputStream source {input_prompt, sink.get_output_codec_context(), SourceTimingModes::realtime, DefaultSourceModes::white_noise};
-    // InputStream new_source {};
-    // InputStream source{input_prompt, sink.get_output_codec_context(),
-    //                                      SourceTimingModes::realtime, DefaultSourceModes::white_noise};
-    InputStream source{};
+
     InputStream new_source{};
+    InputStream source {input_prompt, sink.get_output_codec_context(),
+                                       SourceTimingModes::freetime, DefaultSourceModes::white_noise};
+    // InputStream source {InputStream{sink.get_output_codec_context(), DefaultSourceModes::white_noise}};
+    //source = source1;
 
     // try
     // {
