@@ -22,8 +22,7 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     m_output_format = av_guess_format(format_s, 
                                         m_destination_url.c_str(), content_type_s);
 
-    /* allocate the output media context , guesses format based on filename if format is NULL*/
-    
+    /* allocate the output media context , guesses format based on filename if format is NULL*/    
     avformat_alloc_output_context2(&m_output_format_context, m_output_format, NULL, m_destination_url.c_str());
 
     if (!m_output_format_context)
@@ -31,13 +30,14 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         
     }
 
+    const AVCodec* output_codec {};
 
     /* Add the audio stream using the default format codecs 
         and initialize the codecs. */
     if (m_output_format->audio_codec != AV_CODEC_ID_NONE)     
     {
-        m_output_codec = avcodec_find_encoder(m_output_format->audio_codec);
-        if (!(m_output_codec)) 
+        output_codec = avcodec_find_encoder(m_output_format->audio_codec);
+        if (!(output_codec)) 
         {
             fprintf(stderr, "Could not find encoder for '%s'\n",
                     avcodec_get_name(m_output_format->audio_codec));
@@ -60,7 +60,7 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
 
         m_audio_stream->id = m_output_format_context->nb_streams-1;
      
-        m_output_codec_context = avcodec_alloc_context3(m_output_codec);
+        m_output_codec_context = avcodec_alloc_context3(output_codec);
         if (!m_output_codec_context) 
         {
             fprintf(stderr, "Could not alloc an encoding context\n");
@@ -69,15 +69,15 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
    
         int i;
 
-        m_output_codec_context->sample_fmt  =(m_output_codec)->sample_fmts ?
-            (m_output_codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+        m_output_codec_context->sample_fmt  =output_codec->sample_fmts ?
+            output_codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
         m_output_codec_context->bit_rate    = m_bit_rate;
         m_output_codec_context->sample_rate = DEFAULT_SAMPLE_RATE;
-        if ((m_output_codec)->supported_samplerates) 
+        if (output_codec->supported_samplerates) 
         {
-            for (i = 0; (m_output_codec)->supported_samplerates[i]; i++) 
+            for (i = 0; output_codec->supported_samplerates[i]; i++) 
             {
-                if ((m_output_codec)->supported_samplerates[i] == m_sample_rate)
+                if (output_codec->supported_samplerates[i] == m_sample_rate)
                     m_output_codec_context->sample_rate = m_sample_rate;
             }
         }
@@ -90,18 +90,17 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         {
             m_output_codec_context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
-           
-
     }
 
     /* Now that all the parameters are set, we can open the audio codecs */
 
     /* copy the options into a temp dictionary*/
-    AVDictionary* opt = NULL;
+    AVDictionary* opt {};
     av_dict_copy(&opt, m_output_options, 0);
 
     /* open the codec with any required options*/
-    m_ret = avcodec_open2(m_output_codec_context, m_output_codec, &opt);
+    m_ret = avcodec_open2(m_output_codec_context, output_codec, &opt);
+
     /* delete the temp dictionary*/
     av_dict_free(&opt);
     
@@ -110,27 +109,6 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
         fprintf(stderr, "Could not open audio codec\n");
     }
 
-    /*ensures a frame with > 0 samples is created even if the codec context has a frame size of zero (implies variable frame size?)*/
-    if (m_output_codec_context->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-        m_nb_samples = DEFAULT_FRAME_SIZE;
-    else
-        m_nb_samples = m_output_codec_context->frame_size;
-
-
-    /* allocate an empty frame*/
-    m_frame = av_frame_alloc();
-    if (!m_frame) 
-    {
-        fprintf(stderr, "Error allocating an audio frame\n");
-    }
-
-    /*copy the frame parameters from the codec context / set them if they need setting*/
-    m_frame->format = m_output_codec_context->sample_fmt;
-    av_channel_layout_copy(&m_frame->ch_layout, &m_output_codec_context->ch_layout);
-    m_frame->sample_rate = DEFAULT_SAMPLE_RATE;
-    m_frame->nb_samples = m_nb_samples;
-
-  
     m_ret = avcodec_parameters_from_context(m_audio_stream->codecpar, m_output_codec_context);
     if (m_ret < 0) {
         fprintf(stderr, "Could not copy the stream parameters\n");
@@ -152,7 +130,7 @@ OutputStream::OutputStream(std::string destination_url, AVDictionary* output_opt
     if (m_ret < 0) 
     {
         fprintf(stderr, "Error occurred when opening output file\n");
-    }    
+    }
 
 }
 
@@ -167,14 +145,14 @@ OutputStream::~OutputStream()
 {
     avformat_free_context(m_output_format_context);
     avcodec_free_context(&m_output_codec_context);
-    av_frame_free(&m_frame);
     av_packet_free(&m_pkt);
-    
 }
 
 int OutputStream::write_frame(InputStream& source)
 {
+    /*ensure this.m_frame stores the address of the same frame as source.m_frame*/
     m_frame = source.get_frame();
+    /*make sure the frame has the correct pts [performance time stamp]*/
     m_frame->pts = av_rescale_q(m_samples_count, (AVRational){1, m_output_codec_context->sample_rate},
                                 m_output_codec_context->time_base);
     m_samples_count += m_frame -> nb_samples;
@@ -222,7 +200,7 @@ void OutputStream::finish_streaming()
  
     /* free the stream */
     avformat_free_context(m_output_format_context);
-
+    m_output_format_context = nullptr;
 }
 
 int OutputStream::get_frame_length_milliseconds()

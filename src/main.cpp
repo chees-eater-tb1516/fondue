@@ -89,12 +89,11 @@ void audio_processing (InputStream &source, InputStream &new_source,
 }
 
 
-void control(InputStream &new_source, const OutputStream &sink)
+void control(InputStream &new_source, const AVCodecContext& output_codec_ctx)
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
     FFMPEGString new_input {"-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3"};
-    AVCodecContext output_codec_ctx = sink.get_output_codec_context();
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
@@ -144,11 +143,10 @@ int main ()
     }
     
     std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
-    std::thread controlThread(control, std::ref(new_source), sink);
+    std::thread controlThread(control, std::ref(new_source), std::ref(sink.get_output_codec_context()));
 
     audioThread.join();
     controlThread.join();
 
-    
     return 0;
 }

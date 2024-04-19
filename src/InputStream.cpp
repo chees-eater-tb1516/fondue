@@ -3,7 +3,7 @@
 
 
 
-InputStream::InputStream(std::string source_url, AVInputFormat* format, AVCodecContext& output_codec_ctx, AVDictionary* options, 
+InputStream::InputStream(std::string source_url, AVInputFormat* format, const AVCodecContext& output_codec_ctx, AVDictionary* options, 
                             SourceTimingModes timing_mode, DefaultSourceModes source_mode):
     m_source_url {source_url},
     m_output_codec_ctx {output_codec_ctx},
@@ -70,7 +70,7 @@ InputStream::InputStream(std::string source_url, AVInputFormat* format, AVCodecC
 
 }
 
-InputStream::InputStream(FFMPEGString &prompt_string, AVCodecContext& output_codec_ctx, 
+InputStream::InputStream(FFMPEGString &prompt_string, const AVCodecContext& output_codec_ctx, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode):
                         
                         InputStream(prompt_string.url(), prompt_string.input_format(), output_codec_ctx, prompt_string.options(), timing_mode, source_mode)
@@ -79,7 +79,7 @@ InputStream::InputStream(FFMPEGString &prompt_string, AVCodecContext& output_cod
 }
 
    
-InputStream::InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes source_mode):
+InputStream::InputStream(const AVCodecContext& output_codec_ctx, DefaultSourceModes source_mode):
     m_output_codec_ctx {output_codec_ctx},
     m_source_mode {source_mode}
 {

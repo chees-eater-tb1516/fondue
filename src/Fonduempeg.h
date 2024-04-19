@@ -82,7 +82,9 @@ class InputStream;
 
 class FFMPEGString; 
 
-/*provides methods to encode and mux raw audio data, one frame at a time*/
+/* provides methods to encode and mux raw audio data, one frame at a time
+* doesn't allocate memory to store audio samples, rather shares a pointer to a frame
+* allocated elsewhere, by an instance of InputStream or otherwise*/
 class OutputStream
 {
     private:
@@ -90,7 +92,6 @@ class OutputStream
         AVFormatContext* m_output_format_context {}; 
         const AVOutputFormat* m_output_format {}; 
         AVCodecContext* m_output_codec_context {};
-        const AVCodec* m_output_codec {};
         AVStream* m_audio_stream {};
         int m_samples_count {};
         int m_ret {};
@@ -112,8 +113,6 @@ class OutputStream
         /*destructor*/
         ~OutputStream();
 
-        void set_frame(AVFrame* frame){m_frame = frame;}
-
         AVCodecContext& get_output_codec_context() const {return *m_output_codec_context;}
 
         /*encodes and muxes one frame of audio data*/
@@ -122,11 +121,7 @@ class OutputStream
         /*closes the file and does other end of stream tasks*/
         void finish_streaming ();
 
-        int get_frame_length_milliseconds();
-
-
-
-    
+        int get_frame_length_milliseconds();    
 };
 
 /*provides methods to demux and decode audio data and provide frames of the correct size, 
@@ -170,15 +165,15 @@ class InputStream
         */
 
         /*normal constructor*/
-        InputStream(std::string source_url, AVInputFormat* format, AVCodecContext& output_codec_ctx, AVDictionary* options, 
+        InputStream(std::string source_url, AVInputFormat* format, const AVCodecContext& output_codec_ctx, AVDictionary* options, 
                         SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative constructor from ffmpeg prompt*/
-        InputStream(FFMPEGString &prompt_string, AVCodecContext& output_codec_ctx, 
+        InputStream(FFMPEGString &prompt_string, const AVCodecContext& output_codec_ctx, 
                     SourceTimingModes timing_mode, DefaultSourceModes source_mode);
 
         /*alternative 'no source' constructor*/
-        InputStream(AVCodecContext& output_codec_ctx, DefaultSourceModes source_mode);
+        InputStream(const AVCodecContext& output_codec_ctx, DefaultSourceModes source_mode);
 
         /*default constructor*/
         InputStream();
@@ -213,7 +208,7 @@ class InputStream
         * call multiple times to complete the whole crossfade*/
         bool crossfade_frame(AVFrame* new_input_frame, int& fade_time_remaining, int fade_time);
 
-        /*access the output frame*/
+        /*return a pointer to the output frame*/
         AVFrame* get_frame() const {return m_frame;}
 
         /*configure resamplers for crossfading*/
