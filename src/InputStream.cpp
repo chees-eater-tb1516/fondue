@@ -1,7 +1,4 @@
-
 #include "Fonduempeg.h"
-
-
 
 InputStream::InputStream(std::string source_url, AVInputFormat* format, const AVCodecContext& output_codec_ctx, AVDictionary* options, 
                             SourceTimingModes timing_mode, DefaultSourceModes source_mode):
@@ -60,14 +57,9 @@ InputStream::InputStream(std::string source_url, AVInputFormat* format, const AV
     
         throw "Input: failed to allocate audio samples queue";
     }
-
-       
+   
     std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx.sample_rate);
     m_loop_duration = (m_output_frame_size-1) * sample_duration;
-    int x=1;
-
-
-
 }
 
 InputStream::InputStream(FFMPEGString &prompt_string, const AVCodecContext& output_codec_ctx, 
@@ -415,8 +407,6 @@ int InputStream::decode_one_input_frame_recursive()
 
 int InputStream::resample_one_input_frame()
 {
-    
-    
     m_dst_nb_samples = swr_get_out_samples(m_swr_ctx, m_temp_frame->nb_samples);
     m_frame -> nb_samples = m_dst_nb_samples;
 
@@ -441,14 +431,13 @@ int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
     m_ret=swr_convert(swr_ctx, m_frame->data, m_frame->nb_samples, 
                         (const uint8_t **)m_frame->data, m_frame->nb_samples);
     
-   
     return m_ret;
 }
 
 
 bool InputStream::get_one_output_frame()
 {
-    if (!m_temp_frame)
+    if (!m_temp_frame || !m_frame || !m_swr_ctx)
         throw "InputStream object default initialised and therefore unable to handle audio";
 
     if (!m_source_valid)
@@ -659,6 +648,9 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
 
 void InputStream::init_crossfade()
 {
+    if (!m_swr_ctx)
+        throw "Resampling context not allocated";
+        
     set_resampler_options(m_swr_ctx);
     /* initialize the resampling context */
     if ((swr_init(m_swr_ctx)) < 0) 

@@ -8,7 +8,7 @@
 * It also uses frames as its smallest unit of audio rather the individual samples.
 * The frame size is dictated by the codec used but is typically of the order of 1000 samples.
 *  
-*
+* InputStream and OutputStream should follow RAII paradigm
 *
 */
 

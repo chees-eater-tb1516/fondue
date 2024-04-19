@@ -1,8 +1,5 @@
 #include "Fonduempeg.h"
 
-
-
-
 OutputStream::OutputStream(std::string destination_url, AVDictionary* output_options, 
             int sample_rate, int bit_rate):
 

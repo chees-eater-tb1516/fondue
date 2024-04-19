@@ -1,17 +1,12 @@
 #include "Fonduempeg.h"
-  
-ControlFlags g_flags;
-std::mutex flags_mtx;
 std::mutex new_source_mtx;
 
 /* takes data from one source and sends it to the output url*/
 void continue_streaming (InputStream& source, OutputStream& sink, 
-                         std::chrono::_V2::steady_clock::time_point& end_time)
+                         std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags)
 {
-    std::unique_lock<std::mutex> lock (flags_mtx);
-    while (g_flags.normal_streaming && !g_flags.stop)
+    while (flags.normal_streaming && !flags.stop)
     {
-        lock.unlock();
         try
         {
             source.get_one_output_frame();
@@ -24,7 +19,6 @@ void continue_streaming (InputStream& source, OutputStream& sink,
             std::cout<<exception<<": changing to default source\n";
             source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
         }   
-        lock.lock();
     }    
 }
 
@@ -32,14 +26,24 @@ void continue_streaming (InputStream& source, OutputStream& sink,
 * returns a (rvalue) reference to the incoming stream if the crossfade completes successfully 
 * or a (rvalue) reference to the outgoing stream (immeadiately) in case of any errors*/
 InputStream&& crossfade (InputStream& source, InputStream& new_source, 
-                        OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time)
+                        OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags)
 {
     int fade_time_remaining = DEFAULT_FADE_MS;
     const int fade_time = DEFAULT_FADE_MS;
-    source.init_crossfade();
-    new_source.init_crossfade();
-    std::lock_guard<std::mutex> lock (flags_mtx);
-    while (fade_time_remaining > 0 && !g_flags.stop)
+    try
+    {
+        source.init_crossfade();
+        new_source.init_crossfade();
+    }
+
+    catch (const char* exception)
+    {
+        std::cout<<exception<<": crossfading failed\n";
+        source.end_crossfade();
+        return std::move(source);
+    }
+       
+    while (fade_time_remaining > 0 && !flags.stop)
     {
         /*attempt to decode both input and new input frames and crossfade together*/
         try
@@ -54,6 +58,7 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
         catch (const char* exception)
         {
             std::cout<<exception<<": crossfading failed\n";
+            source.end_crossfade();
             return std::move(source);
         }
     }
@@ -62,34 +67,28 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
 }
 
 void audio_processing (InputStream &source, InputStream &new_source, 
-                        OutputStream &sink)
+                        OutputStream &sink, ControlFlags& flags)
 {
     std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
-    std::unique_lock<std::mutex> lock (flags_mtx);
-    while (!g_flags.stop)
+
+    while (!flags.stop)
     {
-        if (g_flags.normal_streaming)
+        if (flags.normal_streaming)
         {
-            lock.unlock();
-            continue_streaming(source, sink, end_time);
-            lock.lock();
+            continue_streaming(source, sink, end_time, flags);
             continue;
         }            
         else 
         {  
-            lock.unlock();
-            std::unique_lock<std::mutex> lock2 (new_source_mtx);
-            source = crossfade(source, new_source, sink, end_time);
-            lock2.unlock();
-            lock.lock();
-            g_flags.normal_streaming = true;
-        }   
+            std::lock_guard<std::mutex> lock (new_source_mtx);
+            source = crossfade(source, new_source, sink, end_time, flags);
+            flags.normal_streaming = true;
+        }    
     }    
     sink.finish_streaming();
 }
 
-
-void control(InputStream &new_source, const AVCodecContext& output_codec_ctx)
+void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, ControlFlags& flags)
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
@@ -97,26 +96,22 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx)
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
-    while (!g_flags.stop)
+    while (!flags.stop)
     {
         if (count == 20)
         {
-            std::unique_lock<std::mutex> lock2 (new_source_mtx);
+            std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-            lock2.unlock();
-            std::lock_guard<std::mutex> lock (flags_mtx);
-            g_flags.normal_streaming = false;
-            lock2.lock();          
+            flags.normal_streaming = false;  
         }
 
         if (count == 60)
         {
-            std::lock_guard<std::mutex> lock (flags_mtx);
-            g_flags.stop = true;
+            flags.stop = true;
         }
         count ++;
         std::this_thread::sleep_for(refresh_interval);
-    }
+    }    
 }
 
 
@@ -131,6 +126,7 @@ int main ()
     OutputStream sink{output_prompt};
     InputStream source {};
     InputStream new_source{};
+    ControlFlags flags{};
     try
     {    
         source = InputStream {input_prompt, sink.get_output_codec_context(),
@@ -142,8 +138,8 @@ int main ()
         source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
     }
     
-    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink));
-    std::thread controlThread(control, std::ref(new_source), std::ref(sink.get_output_codec_context()));
+    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink), std::ref(flags));
+    std::thread controlThread(control, std::ref(new_source), std::ref(sink.get_output_codec_context()), std::ref(flags));
 
     audioThread.join();
     controlThread.join();
