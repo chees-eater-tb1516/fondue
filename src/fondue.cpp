@@ -5,6 +5,58 @@ using json = nlohmann::json;
 
 std::mutex new_source_mtx;
 
+void continue_streaming (InputStream& source, OutputStream& sink, 
+                         std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags);
+InputStream&& crossfade (InputStream& source, InputStream& new_source, 
+                        OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags);
+void audio_processing (InputStream &source, InputStream &new_source, 
+                        OutputStream &sink, ControlFlags& flags);
+void audio_processing (InputStream &source, InputStream &new_source, 
+                        OutputStream &sink, ControlFlags& flags);
+void control (InputStream &new_source, const AVCodecContext& 
+                        output_codec_ctx, ControlFlags& flags);
+
+int main ()
+{
+    std::ifstream f{"/home/tb1516/fondue/config_files/config.json"};
+    json config = json::parse(f);
+    FFMPEGString input_prompt{config["test input home"]};
+    FFMPEGString output_prompt{config["output"]};
+    f.close();
+
+    avdevice_register_all();
+    OutputStream sink{output_prompt};
+    InputStream source {};
+    InputStream new_source{};
+    ControlFlags flags{};
+    
+    try
+    {    
+        source = InputStream {input_prompt, sink.get_output_codec_context(),
+                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise};
+    }
+    catch (const char* exception)
+    {
+        std::cout<<exception<<": failed to correctly access input, switching to default source\n";
+        source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
+    }
+    
+    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink), std::ref(flags));
+    std::thread controlThread(control, std::ref(new_source), std::ref(sink.get_output_codec_context()), std::ref(flags));
+
+    audioThread.join();
+    controlThread.join();
+
+    return 0;
+}
+
+
+
+
+
+
+
+
 /* takes data from one source and sends it to the output url*/
 void continue_streaming (InputStream& source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags)
@@ -143,37 +195,3 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
     }    
 }
 
-
-int main ()
-{
-    std::ifstream f{"/home/tb1516/fondue/config_files/config.json"};
-    json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input home"]};
-    FFMPEGString output_prompt{config["output"]};
-    f.close();
-
-    avdevice_register_all();
-    OutputStream sink{output_prompt};
-    InputStream source {};
-    InputStream new_source{};
-    ControlFlags flags{};
-    
-    try
-    {    
-        source = InputStream {input_prompt, sink.get_output_codec_context(),
-                                        SourceTimingModes::realtime, DefaultSourceModes::white_noise};
-    }
-    catch (const char* exception)
-    {
-        std::cout<<exception<<": failed to correctly access input, switching to default source\n";
-        source = InputStream {sink.get_output_codec_context(), DefaultSourceModes::white_noise};
-    }
-    
-    std::thread audioThread(audio_processing, std::ref(source), std::ref(new_source), std::ref(sink), std::ref(flags));
-    std::thread controlThread(control, std::ref(new_source), std::ref(sink.get_output_codec_context()), std::ref(flags));
-
-    audioThread.join();
-    controlThread.join();
-
-    return 0;
-}

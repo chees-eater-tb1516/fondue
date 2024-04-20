@@ -9,7 +9,7 @@ add_subdirectory(lib/FFmpeg)
 add_subdirectory(lib/json)
 
 list(APPEND SOURCES
-    src/main.cpp
+    src/fondue.cpp
     src/InputStream.cpp
     src/OutputStream.cpp
     src/Fonduempeg.h
