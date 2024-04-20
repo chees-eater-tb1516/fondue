@@ -59,7 +59,7 @@ InputStream::InputStream(std::string source_url, AVInputFormat* format, const AV
     }
    
     std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx.sample_rate);
-    m_loop_duration = (m_output_frame_size-1) * sample_duration;
+    m_loop_duration = (m_output_frame_size - DEFAULT_LOOP_TIME_OFFSET_SAMPLES) * sample_duration;
 }
 
 InputStream::InputStream(FFMPEGString &prompt_string, const AVCodecContext& output_codec_ctx, 
@@ -117,8 +117,9 @@ InputStream::InputStream(const AVCodecContext& output_codec_ctx, DefaultSourceMo
         throw "Default input: failed to initialise the resampler context";
     }
 
+
     std::chrono::duration<double> sample_duration (1.0 / m_output_codec_ctx.sample_rate);
-    m_loop_duration = (m_output_frame_size-1) * sample_duration;
+    m_loop_duration = (m_output_frame_size-DEFAULT_LOOP_TIME_OFFSET_SAMPLES) * sample_duration;
 
 }
 
@@ -218,25 +219,25 @@ InputStream& InputStream::operator=(const InputStream& input_stream)
     m_source_valid = input_stream.m_source_valid;
     m_source_mode = input_stream.m_source_mode;
 
+    avformat_close_input(&m_format_ctx);
     if (input_stream.m_format_ctx)
     {
-        avformat_close_input(&m_format_ctx);
         m_format_ctx = avformat_alloc_context();
         *m_format_ctx = *(input_stream.m_format_ctx);
     }
     
+    avcodec_free_context(&m_input_codec_ctx);
     if (input_stream.m_input_codec_ctx)
     {
-        avcodec_free_context(&m_input_codec_ctx);
         const AVCodec* dec = avcodec_find_decoder(m_format_ctx->streams[0]->codecpar->codec_id);
         m_input_codec_ctx = avcodec_alloc_context3(dec);
         *m_input_codec_ctx = *(input_stream.m_input_codec_ctx);
         int ret{avcodec_open2(m_input_codec_ctx, dec, NULL)};
     }
 
+    av_packet_free(&m_pkt);
     if (input_stream.m_pkt)
     {
-        av_packet_free(&m_pkt);
         m_pkt = av_packet_alloc();
         *m_pkt = *(input_stream.m_pkt);
     }
@@ -258,13 +259,12 @@ InputStream& InputStream::operator=(const InputStream& input_stream)
     int ret {swr_init(m_swr_ctx)};
     ret = swr_init(m_swr_ctx_xfade);
 
+    av_audio_fifo_free(m_queue);
     if (input_stream.m_queue)
     {
-        av_audio_fifo_free(m_queue);
         m_queue = av_audio_fifo_alloc(m_output_codec_ctx.sample_fmt,
                                         m_output_codec_ctx.ch_layout.nb_channels, 1);
         deepcopy_audio_fifo(input_stream.m_queue);
-
     }
 
     
@@ -304,7 +304,7 @@ InputStream::InputStream(InputStream&& input_stream) noexcept:
     input_stream.m_pkt = nullptr;
     input_stream.m_swr_ctx = nullptr;
     input_stream.m_swr_ctx_xfade = nullptr;
-    input_stream.m_queue = nullptr;
+    input_stream.m_queue = nullptr;    
 }
 
 InputStream& InputStream::operator=(InputStream&& input_stream) noexcept
@@ -326,23 +326,38 @@ InputStream& InputStream::operator=(InputStream&& input_stream) noexcept
     m_timing_mode = input_stream.m_timing_mode;
     m_source_valid = input_stream.m_source_valid;
     m_source_mode = input_stream.m_source_mode;
+
+    avformat_close_input(&m_format_ctx);
     m_format_ctx = input_stream.m_format_ctx;
-    m_input_codec_ctx = input_stream.m_input_codec_ctx;
-    m_frame = input_stream.m_frame;
-    m_temp_frame = input_stream.m_temp_frame;
-    m_pkt = input_stream.m_pkt;
-    m_swr_ctx = input_stream.m_swr_ctx;
-    m_swr_ctx_xfade = input_stream.m_swr_ctx_xfade;
-    m_queue = input_stream.m_queue;
-    
     input_stream.m_format_ctx = nullptr;
+
+    avcodec_free_context(&m_input_codec_ctx);
+    m_input_codec_ctx = input_stream.m_input_codec_ctx;
     input_stream.m_input_codec_ctx = nullptr;
+
+    av_frame_free(&m_frame);
+    m_frame = input_stream.m_frame;
     input_stream.m_frame = nullptr;
+    
+    av_frame_free(&m_temp_frame);
+    m_temp_frame = input_stream.m_temp_frame;
     input_stream.m_temp_frame = nullptr;
+
+    av_packet_free(&m_pkt);
+    m_pkt = input_stream.m_pkt;
     input_stream.m_pkt = nullptr;
+
+    swr_free(&m_swr_ctx);
+    m_swr_ctx = input_stream.m_swr_ctx;
     input_stream.m_swr_ctx = nullptr;
+
+    swr_free(&m_swr_ctx_xfade);
+    m_swr_ctx_xfade = input_stream.m_swr_ctx_xfade;
     input_stream.m_swr_ctx_xfade = nullptr;
-    input_stream.m_queue = nullptr;
+
+    av_audio_fifo_free(m_queue);
+    m_queue = input_stream.m_queue;
+    input_stream.m_queue = nullptr;    
 
     return *this;
 

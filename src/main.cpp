@@ -28,7 +28,7 @@ void continue_streaming (InputStream& source, OutputStream& sink,
 
 /*takes data from the current and incoming sources, crossfades them and sends data to the output URL. 
 * returns a (rvalue) reference to the incoming stream if the crossfade completes successfully 
-* or a (rvalue) reference to the outgoing stream (immeadiately) in case of any errors*/
+* or a (rvalue) reference to the valid stream (immeadiately) in case of any errors*/
 InputStream&& crossfade (InputStream& source, InputStream& new_source, 
                         OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags)
 {
@@ -49,22 +49,36 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
        
     while (fade_time_remaining > 0 && !flags.stop)
     {
-        /*attempt to decode both input and new input frames and crossfade together*/
+        /*attempt to decode new input frame*/
         try
         {
             new_source.get_one_output_frame();
-            source.crossfade_frame (new_source.get_frame(), fade_time_remaining, fade_time);
-            sink.write_frame(source);
-            source.sleep(end_time);
         }
 
-        /*if anything fails*/
-        catch (const char* exception)
+        /*if incoming source fails, stop crossfading and return the old source*/
+        catch(const char* exception)
         {
-            std::cout<<exception<<": crossfading failed\n";
+            std::cout<<"new source: "<<exception<<": crossfading failed \n";
             source.end_crossfade();
             return std::move(source);
         }
+        
+        /*attempt to decode input frame and crossfade together*/
+        try
+        {
+            source.crossfade_frame (new_source.get_frame(), fade_time_remaining, fade_time);
+        }
+
+        /*if outgoing source fails, replace it with a silent source and continue crossfading*/
+        catch (const char* exception)
+        {
+            std::cout<<"outgoing source: "<<exception<<": switching to default source for remaining fade duration\n";
+            source = InputStream(sink.get_output_codec_context(), DefaultSourceModes::silence);
+            continue;
+        }
+
+        sink.write_frame(source);
+        source.sleep(end_time);
     }
     new_source.end_crossfade();
     return std::move(new_source);
@@ -101,23 +115,23 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
     while (!flags.stop)
     {
-        if (count == 30)
+        if (count == 60)
         {
-            std::ifstream f {"/home/tb1516/cppdev/fondue/config_files/config.json"};
+            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
             json config = json::parse(f);
-            FFMPEGString new_input {config["test input 2"]};
+            FFMPEGString new_input {config["test input 2 home"]};
 
             std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
             flags.normal_streaming = false;  
         }
 
-        if (count == 60)
+        if (count == 120)
         {
             //flags.stop = true;
-            std::ifstream f {"/home/tb1516/cppdev/fondue/config_files/config.json"};
+            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
             json config = json::parse(f);
-            FFMPEGString new_input {config["test input"]};
+            FFMPEGString new_input {config["test input home"]};
 
             std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
@@ -132,10 +146,10 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
 int main ()
 {
-    std::ifstream f{"/home/tb1516/cppdev/fondue/config_files/config.json"};
+    std::ifstream f{"/home/tb1516/fondue/config_files/config.json"};
     json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input"]};
-    FFMPEGString output_prompt{config["test output"]};
+    FFMPEGString input_prompt{config["test input home"]};
+    FFMPEGString output_prompt{config["output"]};
     f.close();
 
     avdevice_register_all();

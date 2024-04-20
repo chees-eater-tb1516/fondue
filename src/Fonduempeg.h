@@ -42,9 +42,8 @@ extern "C"{
 #define DEFAULT_BIT_RATE 192000
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
-#define DEFAULT_TIMING_OFFSET 1000
-#define RADIO_URL "icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"
 #define DEFAULT_FADE_MS 2000
+#define DEFAULT_LOOP_TIME_OFFSET_SAMPLES 2
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -52,7 +51,7 @@ enum class DefaultSourceModes {silence, white_noise};
 * to int for e.g. switch statements*/
 constexpr auto operator+(DefaultSourceModes m) noexcept
 {
-    return static_cast<std::underlying_type_t<DefaultSourceModes>>(m);
+    return static_cast<std::underlying_type_t<DefaultSourceModes>>(m); 
 }
 
 enum class SourceTimingModes {realtime, freetime};
