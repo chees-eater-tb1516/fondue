@@ -52,7 +52,64 @@ int main ()
 
 
 
+void audio_processing (InputStream &source, InputStream &new_source, 
+                        OutputStream &sink, ControlFlags& flags)
+{
+    std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
 
+    while (!flags.stop)
+    {
+        if (flags.normal_streaming)
+        {
+            continue_streaming(source, sink, end_time, flags);
+            continue;
+        }            
+        else 
+        {  
+            std::lock_guard<std::mutex> lock (new_source_mtx);
+            source = crossfade(source, new_source, sink, end_time, flags);
+            flags.normal_streaming = true;
+        }    
+    }    
+    sink.finish_streaming();
+}
+
+void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, ControlFlags& flags)
+{
+    std::chrono::duration<int> refresh_interval(1);
+    int count {};
+    SourceTimingModes timing_mode = SourceTimingModes::realtime; 
+    DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
+
+    while (!flags.stop)
+    {
+        if (count == 60)
+        {
+            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
+            json config = json::parse(f);
+            FFMPEGString new_input {config["test input 2 home"]};
+
+            std::lock_guard<std::mutex> lock (new_source_mtx);
+            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
+            flags.normal_streaming = false;  
+        }
+
+        if (count == 120)
+        {
+            //flags.stop = true;
+            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
+            json config = json::parse(f);
+            FFMPEGString new_input {config["test input home"]};
+
+            std::lock_guard<std::mutex> lock (new_source_mtx);
+            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
+            flags.normal_streaming = false;  
+            count = 0;
+        }
+        count ++;
+        std::this_thread::sleep_for(refresh_interval);
+    }    
+}
 
 
 
@@ -136,62 +193,5 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
     return std::move(new_source);
 }
 
-void audio_processing (InputStream &source, InputStream &new_source, 
-                        OutputStream &sink, ControlFlags& flags)
-{
-    std::chrono::_V2::steady_clock::time_point end_time = std::chrono::steady_clock::now();
 
-    while (!flags.stop)
-    {
-        if (flags.normal_streaming)
-        {
-            continue_streaming(source, sink, end_time, flags);
-            continue;
-        }            
-        else 
-        {  
-            std::lock_guard<std::mutex> lock (new_source_mtx);
-            source = crossfade(source, new_source, sink, end_time, flags);
-            flags.normal_streaming = true;
-        }    
-    }    
-    sink.finish_streaming();
-}
-
-void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, ControlFlags& flags)
-{
-    std::chrono::duration<int> refresh_interval(1);
-    int count {};
-    SourceTimingModes timing_mode = SourceTimingModes::realtime; 
-    DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
-
-    while (!flags.stop)
-    {
-        if (count == 60)
-        {
-            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
-            json config = json::parse(f);
-            FFMPEGString new_input {config["test input 2 home"]};
-
-            std::lock_guard<std::mutex> lock (new_source_mtx);
-            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-            flags.normal_streaming = false;  
-        }
-
-        if (count == 120)
-        {
-            //flags.stop = true;
-            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
-            json config = json::parse(f);
-            FFMPEGString new_input {config["test input home"]};
-
-            std::lock_guard<std::mutex> lock (new_source_mtx);
-            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-            flags.normal_streaming = false;  
-            count = 0;
-        }
-        count ++;
-        std::this_thread::sleep_for(refresh_interval);
-    }    
-}
 
