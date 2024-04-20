@@ -54,6 +54,21 @@
         "thread": "cpp",
         "condition_variable": "cpp",
         "mutex": "cpp",
-        "cstring": "cpp"
+        "cstring": "cpp",
+        "any": "cpp",
+        "codecvt": "cpp",
+        "csignal": "cpp",
+        "forward_list": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "unordered_set": "cpp",
+        "optional": "cpp",
+        "iomanip": "cpp",
+        "ranges": "cpp",
+        "span": "cpp",
+        "sstream": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp"
     }
 }

@@ -1,0 +1,7 @@
+{
+    "test output": "test.mp3",
+    "icecast output": "-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio",
+    "test input": "-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3",
+    "test input 2": "-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3",
+    "usb soundcard": "-f alsa -i hw:1,0 -ar 44100 -ac 2"
+}

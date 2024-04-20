@@ -1,4 +1,8 @@
 #include "Fonduempeg.h"
+#include <nlohmann/json.hpp>
+#include<fstream>
+using json = nlohmann::json;
+
 std::mutex new_source_mtx;
 
 /* takes data from one source and sends it to the output url*/
@@ -92,14 +96,17 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 {
     std::chrono::duration<int> refresh_interval(1);
     int count {};
-    FFMPEGString new_input {"-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3"};
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
 
     while (!flags.stop)
     {
-        if (count == 20)
+        if (count == 30)
         {
+            std::ifstream f {"/home/tb1516/cppdev/fondue/config_files/config.json"};
+            json config = json::parse(f);
+            FFMPEGString new_input {config["test input 2"]};
+
             std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
             flags.normal_streaming = false;  
@@ -107,7 +114,15 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
         if (count == 60)
         {
-            flags.stop = true;
+            //flags.stop = true;
+            std::ifstream f {"/home/tb1516/cppdev/fondue/config_files/config.json"};
+            json config = json::parse(f);
+            FFMPEGString new_input {config["test input"]};
+
+            std::lock_guard<std::mutex> lock (new_source_mtx);
+            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
+            flags.normal_streaming = false;  
+            count = 0;
         }
         count ++;
         std::this_thread::sleep_for(refresh_interval);
@@ -117,16 +132,18 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
 int main ()
 {
-    FFMPEGString input_prompt{"-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3"};
-    //FFMPEGString input_prompt{"-f alsa -i hw:1,0 -ar 44100 -ac 2"};
-    FFMPEGString output_prompt{"test.mp3"};
-    //FFMPEGString output_prompt{"-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio"}
+    std::ifstream f{"/home/tb1516/cppdev/fondue/config_files/config.json"};
+    json config = json::parse(f);
+    FFMPEGString input_prompt{config["test input"]};
+    FFMPEGString output_prompt{config["test output"]};
+    f.close();
 
     avdevice_register_all();
     OutputStream sink{output_prompt};
     InputStream source {};
     InputStream new_source{};
     ControlFlags flags{};
+    
     try
     {    
         source = InputStream {input_prompt, sink.get_output_codec_context(),

@@ -6,6 +6,7 @@ include(CTest)
 enable_testing()
 
 add_subdirectory(lib/FFmpeg)
+add_subdirectory(lib/json)
 
 list(APPEND SOURCES
     src/main.cpp
@@ -22,4 +23,4 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-target_link_libraries(fondue FFmpeg)
+target_link_libraries(fondue FFmpeg nlohmann_json::nlohmann_json)
