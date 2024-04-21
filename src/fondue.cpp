@@ -96,7 +96,6 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
         if (count == 120)
         {
-            //flags.stop = true;
             std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
             json config = json::parse(f);
             FFMPEGString new_input {config["test input home"]};
