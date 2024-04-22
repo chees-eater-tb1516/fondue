@@ -1,9 +1,12 @@
 #include "Fonduempeg.h"
 #include <nlohmann/json.hpp>
 #include<fstream>
+
+#define PATH_TO_CONFIG_FILE "/home/icradio/cpp_dev/fondue/config_files/config.json"
 using json = nlohmann::json;
 
 std::mutex new_source_mtx;
+
 
 void continue_streaming (InputStream& source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags);
@@ -18,9 +21,9 @@ void control (InputStream &new_source, const AVCodecContext&
 
 int main ()
 {
-    std::ifstream f{"/home/tb1516/fondue/config_files/config.json"};
+    std::ifstream f{PATH_TO_CONFIG_FILE};
     json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input home"]};
+    FFMPEGString input_prompt{config["test input dramac"]};
     FFMPEGString output_prompt{config["output"]};
     f.close();
 
@@ -85,9 +88,9 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
     {
         if (count == 60)
         {
-            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
+            std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::parse(f);
-            FFMPEGString new_input {config["test input 2 home"]};
+            FFMPEGString new_input {config["test input 2 dramac"]};
 
             std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
@@ -96,9 +99,9 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
         if (count == 120)
         {
-            std::ifstream f {"/home/tb1516/fondue/config_files/config.json"};
+            std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::parse(f);
-            FFMPEGString new_input {config["test input home"]};
+            FFMPEGString new_input {config["test input dramac"]};
 
             std::lock_guard<std::mutex> lock (new_source_mtx);
             new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};

@@ -43,7 +43,7 @@ extern "C"{
 #define DEFAULT_SAMPLE_RATE 44100
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_FADE_MS 2000
-#define DEFAULT_LOOP_TIME_OFFSET_SAMPLES 2
+#define DEFAULT_LOOP_TIME_OFFSET_SAMPLES 3
 
 enum class DefaultSourceModes {silence, white_noise};
 
