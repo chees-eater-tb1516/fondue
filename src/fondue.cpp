@@ -1,8 +1,9 @@
 #include "Fonduempeg.h"
 #include <nlohmann/json.hpp>
 #include<fstream>
+#include<vector>
 
-#define PATH_TO_CONFIG_FILE "/home/tb1516/cppdev/fondue/config_files/config.json"
+#define PATH_TO_CONFIG_FILE "/home/tb1516/fondue/config_files/config.json"
 
 using json = nlohmann::json;
 
@@ -21,11 +22,13 @@ void control (InputStream &new_source, const AVCodecContext&
                         output_codec_ctx, ControlFlags& flags);
 bool find_and_remove(std::string& command, const std::string& substring);
 
+std::vector<std::string> split_command_on_whitespace(const std::string& command);
+
 int main ()
 {
     std::ifstream f{PATH_TO_CONFIG_FILE};
     json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input"]};
+    FFMPEGString input_prompt{config["test input home"]};
     FFMPEGString output_prompt{config["test output"]};
     f.close();
 
@@ -124,18 +127,16 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         {
             std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::parse(f);
-            for (auto it = config.begin(); it != config.end(); ++it)
+            for (auto item = config.begin(); item != config.end(); ++item)
             {
-                std::cout << it.key() << " : " << it.value() << '\n';
+                std::cout << item.key() << " : " << item.value() << '\n';
             }
         }
         // add-source [source name] [source url]
         if (find_and_remove(command, "add-source "))
         {
-            //split the command at the ws character
-            //open the config file and parse as json
-            //add the first string (source name) and the second string (source url) to the json
-            //write the json to file
+            std::vector<std::string> source_vector {split_command_on_whitespace(command)};
+            int x=1;
         }
 
         
@@ -226,12 +227,39 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
     return std::move(new_source);
 }
 
-
+/*returns true if the substring is at the beginning of the command, then removes the substring from the command*/
 bool find_and_remove(std::string& command, const std::string& substring)
 {
     std::size_t found = command.find(substring);
-    if (found != std::string::npos)
+    if (found == 0)
     {
-
+        size_t substring_length {substring.length()};
+        command = command.substr(substring_length, std::string::npos);
+        return true;
     }
+
+    return false;
+}
+
+std::vector<std::string> split_command_on_whitespace(const std::string& command)
+{
+    std::vector<std::string> res{};
+    std::string internal_string{command};
+    size_t position{};
+    while (position < command.size())
+    {
+        /*if subcommand starts with double quotes, skip whitespaces up to the next double quotes*/
+        if (find_and_remove(internal_string, "\""))
+        {
+            position = internal_string.substr(position, std::string::npos).find("\"");
+            res.push_back(internal_string.substr(0, position));
+            internal_string.erase(0, position+1);
+            internal_string.erase(0, 1);
+        }
+
+        position = internal_string.find(" ");
+        res.push_back(internal_string.substr(0, position));
+        internal_string.erase(0, position + 1);
+    }
+    return res;
 }
