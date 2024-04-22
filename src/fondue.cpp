@@ -2,7 +2,8 @@
 #include <nlohmann/json.hpp>
 #include<fstream>
 
-#define PATH_TO_CONFIG_FILE "/home/icradio/cpp_dev/fondue/config_files/config.json"
+#define PATH_TO_CONFIG_FILE "/home/tb1516/cppdev/fondue/config_files/config.json"
+
 using json = nlohmann::json;
 
 std::mutex new_source_mtx;
@@ -18,13 +19,14 @@ void audio_processing (InputStream &source, InputStream &new_source,
                         OutputStream &sink, ControlFlags& flags);
 void control (InputStream &new_source, const AVCodecContext& 
                         output_codec_ctx, ControlFlags& flags);
+bool find_and_remove(std::string& command, const std::string& substring);
 
 int main ()
 {
     std::ifstream f{PATH_TO_CONFIG_FILE};
     json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input dramac"]};
-    FFMPEGString output_prompt{config["output"]};
+    FFMPEGString input_prompt{config["test input"]};
+    FFMPEGString output_prompt{config["test output"]};
     f.close();
 
     avdevice_register_all();
@@ -83,33 +85,62 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
     int count {};
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
+    std::string command {};
 
     while (!flags.stop)
     {
-        if (count == 60)
+        // if (count == 60)
+        // {
+        //     std::ifstream f {PATH_TO_CONFIG_FILE};
+        //     json config = json::parse(f);
+        //     FFMPEGString new_input {config["test input 2 dramac"]};
+
+        //     std::lock_guard<std::mutex> lock (new_source_mtx);
+        //     new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
+        //     flags.normal_streaming = false;  
+        // }
+
+        // if (count == 120)
+        // {
+        //     std::ifstream f {PATH_TO_CONFIG_FILE};
+        //     json config = json::parse(f);
+        //     FFMPEGString new_input {config["test input dramac"]};
+
+        //     std::lock_guard<std::mutex> lock (new_source_mtx);
+        //     new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
+        //     flags.normal_streaming = false;  
+        //     count = 0;
+        // }
+        // count ++;
+        // std::this_thread::sleep_for(refresh_interval);
+        std::getline(std::cin, command);
+        //kill
+        if (command == "kill")
+        {
+            flags.stop = true;
+        }
+        //list-sources
+        if (command == "list-sources")
         {
             std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::parse(f);
-            FFMPEGString new_input {config["test input 2 dramac"]};
-
-            std::lock_guard<std::mutex> lock (new_source_mtx);
-            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-            flags.normal_streaming = false;  
+            for (auto it = config.begin(); it != config.end(); ++it)
+            {
+                std::cout << it.key() << " : " << it.value() << '\n';
+            }
         }
-
-        if (count == 120)
+        // add-source [source name] [source url]
+        if (find_and_remove(command, "add-source "))
         {
-            std::ifstream f {PATH_TO_CONFIG_FILE};
-            json config = json::parse(f);
-            FFMPEGString new_input {config["test input dramac"]};
-
-            std::lock_guard<std::mutex> lock (new_source_mtx);
-            new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-            flags.normal_streaming = false;  
-            count = 0;
+            //split the command at the ws character
+            //open the config file and parse as json
+            //add the first string (source name) and the second string (source url) to the json
+            //write the json to file
         }
-        count ++;
-        std::this_thread::sleep_for(refresh_interval);
+
+        
+
+
     }    
 }
 
@@ -196,4 +227,11 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
 }
 
 
+bool find_and_remove(std::string& command, const std::string& substring)
+{
+    std::size_t found = command.find(substring);
+    if (found != std::string::npos)
+    {
 
+    }
+}
