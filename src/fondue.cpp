@@ -24,16 +24,19 @@ bool find_and_remove(std::string& command, const std::string& substring);
 
 std::vector<std::string> split_command_on_whitespace(const std::string& command);
 
-void write_string_json(const json& j, std::ostream& file);
+json open_config_file(const std::string& file_path);
+
+void write_config_file(const json& config, const std::string& file_path);
+
 
 int main ()
 {
-    std::ifstream f{PATH_TO_CONFIG_FILE};
-    json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input"]};
-    FFMPEGString output_prompt{config["test output"]};
-    f.close();
-
+ 
+    json config = json::object();
+    config = open_config_file(PATH_TO_CONFIG_FILE);
+    FFMPEGString input_prompt{config["sources"]["test input"]};
+    FFMPEGString output_prompt{config["stream settings"]["test output"]};
+    
     avdevice_register_all();
     OutputStream sink{output_prompt};
     InputStream source {};
@@ -103,9 +106,9 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         //list-sources
         if (command == "list-sources")
         {
-            std::ifstream f {PATH_TO_CONFIG_FILE};
-            json config = json::parse(f);
-            for (auto item = config.begin(); item != config.end(); ++item)
+            json config = json::object(); 
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            for (auto item = config["sources"].begin(); item != config["sources"].end(); ++item)
             {
                 std::cout << item.key() << " : " << item.value() << '\n';
             }
@@ -114,13 +117,10 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         if (find_and_remove(command, "add-source "))
         {
             std::vector<std::string> source_vector {split_command_on_whitespace(command)};
-            std::ifstream f{PATH_TO_CONFIG_FILE};
             json config = json::object(); 
-            config = json::parse(f);
-            f.close();
-            config [source_vector[0]] = source_vector[1];
-            std::ofstream o{PATH_TO_CONFIG_FILE};
-            write_string_json(config, o);  
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            config ["sources"][source_vector[0]] = source_vector[1];
+            write_config_file(config, PATH_TO_CONFIG_FILE);
         }
 
         //delete-source [source name]
@@ -128,15 +128,15 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         {
             std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::object();
-            config = json::parse (f);
-            f.close();
-            try 
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            if (config["sources"].contains(command))
             {
-                config.erase(command);
+                config["sources"].erase(command);
+                write_config_file(config, PATH_TO_CONFIG_FILE);
             }
-            catch (json::exception exception)
+            else
             {
-                std::cout << exception.what() <<": this source doesn't seem to exist";
+                std::cout << "requested source doesn't exist, no sources deleted";
             }
         }
     }    
@@ -238,6 +238,7 @@ bool find_and_remove(std::string& command, const std::string& substring)
     return false;
 }
 
+/*splits the string at whitespace characters, ignores whitespaces inside pairs of double quotes*/
 std::vector<std::string> split_command_on_whitespace(const std::string& command)
 {
     std::vector<std::string> res{};
@@ -265,15 +266,19 @@ std::vector<std::string> split_command_on_whitespace(const std::string& command)
     return res;
 }
 
-void write_string_json(const json& j, std::ostream& file)
+/*open the config file and parse it as a json object*/
+json open_config_file(const std::string& file_path)
 {
-    file << "{\n";
-    auto item = j.begin();
-    file << '\"' << item.key() << "\" : " << item.value();
-    ++item;
-    for (item; item != j.end(); ++item)
-    {
-        file  << ",\n" << '\"' << item.key() << "\" : " << item.value();
-    }
-    file << "\n}" <<std::endl;
+    std::ifstream file {file_path};
+    json config = json::object();
+    config = json::parse(file);
+    return config;
+}
+
+
+
+void write_config_file(const json& config, const std::string& file_path)
+{
+    std::ofstream file {file_path};
+    file << config.dump(1, '\t');
 }
