@@ -3,7 +3,7 @@
 #include<fstream>
 #include<vector>
 
-#define PATH_TO_CONFIG_FILE "/home/tb1516/fondue/config_files/config.json"
+#define PATH_TO_CONFIG_FILE "/home/tb1516/cppdev/fondue/config_files/config.json"
 
 using json = nlohmann::json;
 
@@ -24,11 +24,13 @@ bool find_and_remove(std::string& command, const std::string& substring);
 
 std::vector<std::string> split_command_on_whitespace(const std::string& command);
 
+void write_string_json(const json& j, std::ostream& file);
+
 int main ()
 {
     std::ifstream f{PATH_TO_CONFIG_FILE};
     json config = json::parse(f);
-    FFMPEGString input_prompt{config["test input home"]};
+    FFMPEGString input_prompt{config["test input"]};
     FFMPEGString output_prompt{config["test output"]};
     f.close();
 
@@ -92,30 +94,6 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
     while (!flags.stop)
     {
-        // if (count == 60)
-        // {
-        //     std::ifstream f {PATH_TO_CONFIG_FILE};
-        //     json config = json::parse(f);
-        //     FFMPEGString new_input {config["test input 2 dramac"]};
-
-        //     std::lock_guard<std::mutex> lock (new_source_mtx);
-        //     new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-        //     flags.normal_streaming = false;  
-        // }
-
-        // if (count == 120)
-        // {
-        //     std::ifstream f {PATH_TO_CONFIG_FILE};
-        //     json config = json::parse(f);
-        //     FFMPEGString new_input {config["test input dramac"]};
-
-        //     std::lock_guard<std::mutex> lock (new_source_mtx);
-        //     new_source = InputStream{new_input, output_codec_ctx, timing_mode, source_mode};
-        //     flags.normal_streaming = false;  
-        //     count = 0;
-        // }
-        // count ++;
-        // std::this_thread::sleep_for(refresh_interval);
         std::getline(std::cin, command);
         //kill
         if (command == "kill")
@@ -136,12 +114,31 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         if (find_and_remove(command, "add-source "))
         {
             std::vector<std::string> source_vector {split_command_on_whitespace(command)};
-            int x=1;
+            std::ifstream f{PATH_TO_CONFIG_FILE};
+            json config = json::object(); 
+            config = json::parse(f);
+            f.close();
+            config [source_vector[0]] = source_vector[1];
+            std::ofstream o{PATH_TO_CONFIG_FILE};
+            write_string_json(config, o);  
         }
 
-        
-
-
+        //delete-source [source name]
+        if (find_and_remove(command, "delete-source"))
+        {
+            std::ifstream f {PATH_TO_CONFIG_FILE};
+            json config = json::object();
+            config = json::parse (f);
+            f.close();
+            try 
+            {
+                config.erase(command);
+            }
+            catch (json::exception exception)
+            {
+                std::cout << exception.what() <<": this source doesn't seem to exist";
+            }
+        }
     }    
 }
 
@@ -245,16 +242,20 @@ std::vector<std::string> split_command_on_whitespace(const std::string& command)
 {
     std::vector<std::string> res{};
     std::string internal_string{command};
-    size_t position{};
-    while (position < command.size())
+    size_t position{}, temp_position{};
+    while (position < internal_string.size())
     {
-        /*if subcommand starts with double quotes, skip whitespaces up to the next double quotes*/
-        if (find_and_remove(internal_string, "\""))
+        /*ignore white spaces enclosed in double quotes*/
+        position = internal_string.find("\"");
+        /*check for "" at the beginning of the command*/
+        if (position == 0)
         {
-            position = internal_string.substr(position, std::string::npos).find("\"");
-            res.push_back(internal_string.substr(0, position));
-            internal_string.erase(0, position+1);
-            internal_string.erase(0, 1);
+            temp_position = internal_string.substr(1, std::string::npos).find("\"");
+            if (temp_position == std::string::npos)
+                throw "expected a pair of \"\" but read only one"; 
+            res.push_back(internal_string.substr(1, temp_position));
+            internal_string.erase(0, temp_position + 3);
+            continue;
         }
 
         position = internal_string.find(" ");
@@ -262,4 +263,17 @@ std::vector<std::string> split_command_on_whitespace(const std::string& command)
         internal_string.erase(0, position + 1);
     }
     return res;
+}
+
+void write_string_json(const json& j, std::ostream& file)
+{
+    file << "{\n";
+    auto item = j.begin();
+    file << '\"' << item.key() << "\" : " << item.value();
+    ++item;
+    for (item; item != j.end(); ++item)
+    {
+        file  << ",\n" << '\"' << item.key() << "\" : " << item.value();
+    }
+    file << "\n}" <<std::endl;
 }
