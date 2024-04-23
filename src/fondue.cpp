@@ -3,7 +3,7 @@
 #include<fstream>
 #include<vector>
 
-#define PATH_TO_CONFIG_FILE "/home/tb1516/cppdev/fondue/config_files/config.json"
+#define PATH_TO_CONFIG_FILE "/home/tb1516/fondue/config_files/config.json"
 
 using json = nlohmann::json;
 
@@ -34,7 +34,7 @@ int main ()
  
     json config = json::object();
     config = open_config_file(PATH_TO_CONFIG_FILE);
-    FFMPEGString input_prompt{config["sources"]["test input"]};
+    FFMPEGString input_prompt{config["sources"]["test input home"]};
     FFMPEGString output_prompt{config["stream settings"]["test output"]};
     
     avdevice_register_all();
@@ -89,8 +89,7 @@ void audio_processing (InputStream &source, InputStream &new_source,
 
 void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, ControlFlags& flags)
 {
-    std::chrono::duration<int> refresh_interval(1);
-    int count {};
+    
     SourceTimingModes timing_mode = SourceTimingModes::realtime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
     std::string command {};
@@ -98,13 +97,14 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
     while (!flags.stop)
     {
         std::getline(std::cin, command);
+
         //kill
         if (command == "kill")
         {
             flags.stop = true;
         }
         //list-sources
-        if (command == "list-sources")
+        else if (command == "list-sources")
         {
             json config = json::object(); 
             config = open_config_file(PATH_TO_CONFIG_FILE);
@@ -114,7 +114,7 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             }
         }
         // add-source [source name] [source url]
-        if (find_and_remove(command, "add-source "))
+        else if (find_and_remove(command, "add-source "))
         {
             std::vector<std::string> source_vector {split_command_on_whitespace(command)};
             json config = json::object(); 
@@ -124,11 +124,15 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
         }
 
         //delete-source [source name]
-        if (find_and_remove(command, "delete-source"))
+        else if (find_and_remove(command, "delete-source "))
         {
-            std::ifstream f {PATH_TO_CONFIG_FILE};
             json config = json::object();
             config = open_config_file(PATH_TO_CONFIG_FILE);
+            if (find_and_remove(command, "\""))
+            {
+                size_t position = command.find("\"");
+                command=command.substr(0, position);
+            }
             if (config["sources"].contains(command))
             {
                 config["sources"].erase(command);
@@ -136,9 +140,101 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             }
             else
             {
-                std::cout << "requested source doesn't exist, no sources deleted";
+                std::cout << "requested source doesn't exist, no sources deleted\n";
             }
         }
+
+        //test-source [source name]
+        else if (find_and_remove(command, "test-source "))
+        {
+            json config = json::object();
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            if (find_and_remove(command, "\""))
+            {
+                size_t position = command.find("\"");
+                command=command.substr(0, position);
+            }
+            if (config["sources"].contains(command))
+            {
+                FFMPEGString prompt {config["sources"][command]};
+                InputStream test_input {};
+                try
+                {
+                    test_input = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
+                    std::cout << "source initialised successfully \n";
+                    try 
+                    {
+                        test_input.get_one_output_frame();
+                        std::cout << "data accessed successfully \n";
+                    }
+                    catch (const char* exception)
+                    {
+                        std::cout << "couldn't access data: " << exception << '\n';
+                    }
+                }
+                catch(const char* exception)
+                {
+                    std::cout << "source failed: " << exception << '\n';
+                }                
+            }
+            else
+            {
+                std::cout << "requested source doesn't exist, no sources tested\n";
+            }
+        }
+
+        //use-source [source name]
+        else if (find_and_remove(command, "use-source "))
+        {
+            json config = json::object();
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            if (find_and_remove(command, "\""))
+            {
+                size_t position = command.find("\"");
+                command=command.substr(0, position);
+            }
+            if (config["sources"].contains(command))
+            {
+                FFMPEGString prompt {config["sources"][command]};
+            
+                try
+                {
+                    new_source = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
+                }
+                catch(const char* exception)
+                {
+                    std::cout << "source failed: " << exception << '\n';
+                } 
+
+                std::cout << "source initialised successfully \n";
+                flags.normal_streaming = false;
+                config["stream settings"]["active source"] = command;
+                write_config_file(config, PATH_TO_CONFIG_FILE);             
+            }
+            else
+            {
+                std::cout << "requested source doesn't exist\n";
+            }
+        }
+        //active-source
+        else if (command == "active-source")
+        {
+            json config = json::object();
+            config = open_config_file(PATH_TO_CONFIG_FILE);
+            std::cout << config["stream settings"]["active source"] << '\n';
+        }
+
+        else
+        {
+            std::cout << "Usage: \nkill: end streaming\n";
+            std::cout << "list-sources: list saved audio source names and input prompts\n";
+            std::cout << "add-source [source name] [input prompt]: save a new source\n";
+            std::cout << "delete-source [source name]: delete a source\n";
+            std::cout << "test-source [source name]: verify a source can be opened and can provide audio\n";
+            std::cout << "use-source [source name]: switch to streaming from this source\n";
+            std::cout << "active-source: return the name of the source currently in use";
+        }
+
     }    
 }
 
@@ -253,7 +349,11 @@ std::vector<std::string> split_command_on_whitespace(const std::string& command)
         {
             temp_position = internal_string.substr(1, std::string::npos).find("\"");
             if (temp_position == std::string::npos)
-                throw "expected a pair of \"\" but read only one"; 
+            {
+                std::cout<<"expected a pair of \"\" but read only one\n";
+                break;
+            }
+               
             res.push_back(internal_string.substr(1, temp_position));
             internal_string.erase(0, temp_position + 3);
             continue;
