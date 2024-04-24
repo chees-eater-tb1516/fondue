@@ -10,6 +10,7 @@
 	},
 	"stream settings": {
 		"active source": "test input 2 home",
+		"default source": "usb soundcard",
 		"bit rate": 192000,
 		"output": "-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio",
 		"sample rate": 44100,
