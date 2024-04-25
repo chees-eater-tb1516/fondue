@@ -22,6 +22,8 @@ extern "C"{
 #include <libavutil/opt.h>
 #include <libavutil/error.h>
 #include <libavutil/avassert.h>
+#include<libavutil/avutil.h>
+#include<libavutil/channel_layout.h>
 #include<libavutil/audio_fifo.h>
 #include<libavfilter/avfilter.h>
 #include<libavdevice/avdevice.h>
