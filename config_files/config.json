@@ -3,15 +3,15 @@
 		"test input": "-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3",
 		"test input 2": "-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3",
 		"test input 2 dramac": "-i /home/icradio/cpp_dev/fondue/audio_sources/Like_as_the_hart.mp3",
-		"test input 2 home": "-i /home/tb1516/fondue/audio_sources/alt_theme.mp3 ",
+		"test input 2 home": "/home/icradio/audio_sources/alt_theme.mp3",
 		"test input dramac": "-i /home/icradio/cpp_dev/fondue/audio_sources/main_theme.mp3",
-		"test input home": "-i /home/tb1516/fondue/audio_sources/main_theme.mp3",
+		"test input home": "/home/icradio/audio_sources/main_theme.mp3",
 		"usb soundcard": "-f alsa -i hw:1,0 -ar 44100 -ac 2"
 	},
 	"stream settings": {
-		"active source": "test input 2 home",
-		"default source": "usb soundcard",
+		"active source": "test input home",
 		"bit rate": 192000,
+		"default source": "usb soundcard",
 		"output": "-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio",
 		"sample rate": 44100,
 		"test output": "test.mp3"

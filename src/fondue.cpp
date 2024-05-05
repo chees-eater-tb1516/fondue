@@ -3,7 +3,7 @@
 #include<fstream>
 #include<vector>
 
-#define PATH_TO_CONFIG_FILE "/home/icradio/cpp_dev/fondue/config_files/config.json"
+#define PATH_TO_CONFIG_FILE "/home/icradio/fondue/config_files/config.json"
 
 using json = nlohmann::json;
 
@@ -38,7 +38,7 @@ int main ()
     avdevice_register_all();
     std::string default_source_name {config["stream settings"]["default source"]};
     FFMPEGString input_prompt{config["sources"][default_source_name]};
-    FFMPEGString output_prompt{config["stream settings"]["test output"]};
+    FFMPEGString output_prompt{config["stream settings"]["output"]};
     
     
     OutputStream sink{output_prompt};
