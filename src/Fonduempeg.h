@@ -142,6 +142,7 @@ class InputStream
         AVPacket* m_pkt{};
         bool m_got_frame = false;
         int m_ret{};
+        int m_stream_index{};
         struct SwrContext* m_swr_ctx {};
         struct SwrContext* m_swr_ctx_xfade{};
         int m_dst_nb_samples{};
@@ -229,9 +230,6 @@ class InputStream
         * 
         * 
         */
-
-        /*decode and store one frame of raw audio from the input resource*/
-        int decode_one_input_frame_recursive();
 
         /*convert the sample format, sample rate and channel layout of the input frame to 
         those which the output encoder requires. NOTE the resulting frame will most likely 

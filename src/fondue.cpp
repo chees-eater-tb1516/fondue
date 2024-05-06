@@ -10,7 +10,7 @@ using json = nlohmann::json;
 std::mutex new_source_mtx;
 
 
-void continue_streaming (InputStream& source, OutputStream& sink, 
+void continue_streaming (InputStream& source, InputStream& new_source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags);
 InputStream&& crossfade (InputStream& source, InputStream& new_source, 
                         OutputStream& sink, std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags);
@@ -77,7 +77,7 @@ void audio_processing (InputStream &source, InputStream &new_source,
     {
         if (flags.normal_streaming)
         {
-            continue_streaming(source, sink, end_time, flags);
+            continue_streaming(source, new_source, sink, end_time, flags);
             continue;
         }            
         else 
@@ -93,7 +93,7 @@ void audio_processing (InputStream &source, InputStream &new_source,
 void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, ControlFlags& flags)
 {
     
-    SourceTimingModes timing_mode = SourceTimingModes::realtime; 
+    SourceTimingModes timing_mode = SourceTimingModes::freetime; 
     DefaultSourceModes source_mode = DefaultSourceModes::white_noise;
     std::string command {};
 
@@ -157,6 +157,11 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
                 size_t position = command.find("\"");
                 command=command.substr(0, position);
             }
+            if (config["stream settings"]["active source"] == command)
+            {
+                std::cout<<"source currently in use\n";
+                goto end;
+            }
             if (config["sources"].contains(command))
             {
                 FFMPEGString prompt {config["sources"][command]};
@@ -184,6 +189,9 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             {
                 std::cout << "requested source doesn't exist, no sources tested\n";
             }
+
+            end:
+                std::cout<<"source not tested\n";
         }
 
         //use-source [source name]
@@ -203,14 +211,17 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
                 try
                 {
                     new_source = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
+                    /*decode 5 input frames*/
+                    for (int i = 0; i < 5; i++)
+                        new_source.get_one_output_frame();
                 }
                 catch(const char* exception)
                 {
                     std::cout << "source failed: " << exception << '\n';
                 } 
 
-                std::cout << "source initialised successfully \n";
                 flags.normal_streaming = false;
+                std::cout << "source initialised successfully \n";
                 config["stream settings"]["active source"] = command;
                 write_config_file(config, PATH_TO_CONFIG_FILE);             
             }
@@ -234,8 +245,9 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             std::cout << "add-source [source name] [input prompt]: save a new source\n";
             std::cout << "delete-source [source name]: delete a source\n";
             std::cout << "test-source [source name]: verify a source can be opened and can provide audio\n";
+            std::cout << "load-source [source name]: begin decoding samples from a source ahead of crossfading\n";
             std::cout << "use-source [source name]: switch to streaming from this source\n";
-            std::cout << "active-source: return the name of the source currently in use";
+            std::cout << "active-source: return the name of the source currently in use\n";
         }
 
     }    
@@ -245,13 +257,14 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
 
 
 /* takes data from one source and sends it to the output url*/
-void continue_streaming (InputStream& source, OutputStream& sink, 
+void continue_streaming (InputStream& source, InputStream& new_source, OutputStream& sink, 
                          std::chrono::_V2::steady_clock::time_point& end_time, ControlFlags& flags)
 {
     while (flags.normal_streaming && !flags.stop)
     {
         try
         {
+            //new_source.get_one_output_frame();
             source.get_one_output_frame();
             sink.write_frame(source);
             source.sleep(end_time);        

@@ -41,7 +41,6 @@ InputStream::InputStream(std::string source_url, AVInputFormat* format, const AV
     
     if (!m_pkt) 
     {
-    
         throw "Input: could not allocate packet";
     }
 
@@ -363,63 +362,6 @@ InputStream& InputStream::operator=(InputStream&& input_stream) noexcept
 
 }
 
-
-int InputStream::decode_one_input_frame_recursive()
-{
-    if (!m_got_frame)
-    {
-        m_ret = av_read_frame(m_format_ctx, m_pkt);
-        if (m_ret < 0)
-        {
-            if (m_ret == AVERROR_EOF)
-                return m_ret;
-            printf("Error reading a packet from file\n");
-            return m_ret;
-        }
-            
-
-        m_ret = avcodec_send_packet(m_input_codec_ctx, m_pkt);
-        if (m_ret < 0)
-        {
-            printf("Error submitting a packet for decoding\n");
-            return m_ret;
-        }
-    }
-    
-    if (m_ret >= 0)
-    {
-        m_ret = avcodec_receive_frame(m_input_codec_ctx, m_temp_frame);
-
-        
-        
-        if (m_ret < 0) 
-        {
-            // those two return values are special and mean there is no output
-            // frame available, but there were no errors during decoding
-            if (m_ret == AVERROR_EOF || m_ret == AVERROR(EAGAIN))
-            {
-                m_ret = 0;
-                m_got_frame = false;
-                //get the next packet
-                av_packet_unref (m_pkt);
-                return decode_one_input_frame_recursive();
-            }
-
-            printf("Error during decoding\n");
-            return m_ret;
-        }
-        m_got_frame = true;
-
-        
-        return m_ret;
-
-    }
-
-   return m_ret;
-}
-
-
-
 int InputStream::resample_one_input_frame()
 {
     m_dst_nb_samples = swr_get_out_samples(m_swr_ctx, m_temp_frame->nb_samples);
@@ -452,9 +394,12 @@ int InputStream::resample_one_input_frame(SwrContext* swr_ctx)
 
 bool InputStream::get_one_output_frame()
 {
+    /*check integrity of InputStream object, if invalid, just do nothing*/
     if (!m_temp_frame || !m_frame || !m_swr_ctx)
-        throw "InputStream object default initialised and therefore unable to handle audio";
+        //throw "InputStream object default initialised and therefore unable to handle audio";
+        return false;
 
+    /*if source is invalid, synthesise audio*/
     if (!m_source_valid)
     {
         int i, j, v, fullscale;
@@ -497,62 +442,82 @@ bool InputStream::get_one_output_frame()
         }
         return true;
     }
-    
-    
-    
-    
-    /*if (m_output_codec_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-    {
-        if (decode_one_input_frame() < 0) return false;
-        if (resample_one_input_frame() < 0) return false;
-        return true;
-    }*/
 
-    /*ensure the queue is long enough to contain 1 more input frame than required*/
-    if(av_audio_fifo_realloc(m_queue, m_output_frame_size+m_frame->nb_samples) < 0)
+    /*if enough samples are ready, copy one frame's worth to m_frame*/
+    if (av_audio_fifo_size(m_queue) >= m_output_frame_size)
     {
-        fprintf(stderr, "could not reallocate FIFO\n");
-        throw "could not reallocate FIFO";
-        return false;
-    }
+        m_frame->nb_samples = m_output_frame_size;
+        m_ret=av_frame_make_writable(m_frame);
 
-
-    /*buffer up enough samples to create one output sized frame*/
-    while(m_number_buffered_samples < m_output_frame_size)
-    {
-        if (decode_one_input_frame_recursive() < 0) 
+        /*insert the correct number of samples from the queue into the output frame*/
+        if (av_audio_fifo_read(m_queue, (void **)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples) 
         {
-            throw "could not decode an input frame";
-            return false;
-        }    
-        if (resample_one_input_frame() < 0)
-        {
-            throw "could not resample the input frame";
-            return false;
-        } 
-        if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples)< m_frame->nb_samples)
-        {
-            fprintf(stderr, "could not write data to FIFO\n");
-            throw "could not write data to FIFO";
-            return false;
+            throw "Could not read data from FIFO";
         }
-        m_number_buffered_samples = av_audio_fifo_size(m_queue);
+        return true;
     }
 
-    m_frame->nb_samples = m_output_frame_size;
-    m_ret=av_frame_make_writable(m_frame);
-
-    /*insert the correct number of samples from the queue into the output frame*/
-    if (av_audio_fifo_read(m_queue, (void **)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples) 
+    else
     {
-        fprintf(stderr, "Could not read data from FIFO\n");
-        throw "Could not read data from FIFO";
-        return false;
-    }
+        while (av_audio_fifo_size(m_queue) <= m_output_frame_size)
+        {
+            /*request a new packet from the input*/
+            m_ret = av_read_frame(m_format_ctx, m_pkt);
+            if (m_ret < 0)
+            {
+                if (m_ret == AVERROR_EOF)
+                    throw "no more packets, reached end of input";
+                throw "error reading packet";
+            }
 
-    m_number_buffered_samples = av_audio_fifo_size(m_queue);
-    
-    return true;
+            /*skip the packet if it's not an audio packet*/
+            if (m_pkt->stream_index != m_stream_index)
+            {
+                continue;
+            }
+
+            /*send the packet to the decoder*/
+            m_ret = avcodec_send_packet(m_input_codec_ctx, m_pkt);
+            if (m_ret < 0)
+            {
+                throw "error submitting a packet for decoding";
+            }
+
+            av_packet_unref(m_pkt);
+
+            /*get all the raw frames out of the packet. there may be
+            * more than one for some codecs*/
+           while (m_ret >= 0)
+           {
+                m_ret = avcodec_receive_frame(m_input_codec_ctx, m_temp_frame);
+                if (m_ret < 0)
+                {
+                    //special cases if no frame was available but otherwise no errors
+                    if (m_ret == AVERROR_EOF || m_ret == AVERROR(EAGAIN))
+                        continue;
+                    throw "error during decoding";
+                }
+                /*resample the frame into the output sample format and sample rate*/
+                if (resample_one_input_frame() < 0)
+                    throw "could not resample input frame";
+                
+                /*add all samples from the frame to the FIFO*/
+                if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples)
+                    throw "could not write the decoded frame to the fifo";
+           }
+        }
+
+        m_frame->nb_samples = m_output_frame_size;
+        m_ret=av_frame_make_writable(m_frame);
+
+        /*insert the correct number of samples from the queue into the output frame*/
+        if (av_audio_fifo_read(m_queue, (void **)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples) 
+        {
+            throw "Could not read data from FIFO";
+        }
+        return true;
+
+    }
   
 }
 
@@ -594,7 +559,9 @@ int InputStream::open_codec_context(enum AVMediaType type)
     const AVCodec* dec{};
  
     
-        st = m_format_ctx->streams[0];
+        /*determine the stream index of the audio stream*/
+        m_stream_index = av_find_best_stream(m_format_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+        st = m_format_ctx->streams[m_stream_index];
  
         /* find decoder for the stream */
         dec = avcodec_find_decoder(st->codecpar->codec_id);

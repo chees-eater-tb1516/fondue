@@ -1,5 +1,7 @@
 {
 	"sources": {
+		"rtmp": "-i rtmp://icr-brannigan.media.su.ic.ac.uk/live/test",
+		"rtp": "-i rtp://127.0.0.1:1234",
 		"test input": "-i /home/tb1516/cppdev/fondue/audio_sources/main_theme.mp3",
 		"test input 2": "-i /home/tb1516/cppdev/fondue/audio_sources/Like_as_the_hart.mp3",
 		"test input 2 dramac": "-i /home/icradio/cpp_dev/fondue/audio_sources/Like_as_the_hart.mp3",
@@ -9,9 +11,9 @@
 		"usb soundcard": "-f alsa -i hw:1,0 -ar 44100 -ac 2"
 	},
 	"stream settings": {
-		"active source": "test input home",
+		"active source": "rtp",
 		"bit rate": 192000,
-		"default source": "usb soundcard",
+		"default source": "rtmp",
 		"output": "-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio",
 		"sample rate": 44100,
 		"test output": "test.mp3"
