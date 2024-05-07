@@ -473,6 +473,7 @@ bool InputStream::get_one_output_frame()
             /*skip the packet if it's not an audio packet*/
             if (m_pkt->stream_index != m_stream_index)
             {
+                av_packet_unref(m_pkt);
                 continue;
             }
 
