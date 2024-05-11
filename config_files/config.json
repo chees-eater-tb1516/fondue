@@ -11,9 +11,9 @@
 		"usb soundcard": "-f alsa -i hw:1,0 -ar 44100 -ac 2"
 	},
 	"stream settings": {
-		"active source": "rtp",
+		"active source": "test input 2 home",
 		"bit rate": 192000,
-		"default source": "rtmp",
+		"default source": "test input home",
 		"output": "-c:a libmp3lame -f mp3 -content_type audio/mpeg icecast://source:mArc0n1@icr-emmental.media.su.ic.ac.uk:8888/radio",
 		"sample rate": 44100,
 		"test output": "test.mp3"

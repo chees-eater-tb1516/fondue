@@ -35,6 +35,7 @@ extern "C"{
 #include<cmath>
 #include<cstdlib>
 #include<thread>
+#include<future>
 #include<functional>
 #include<mutex>
 #include<cstring>
@@ -46,6 +47,7 @@ extern "C"{
 #define DEFAULT_FRAME_SIZE 10000
 #define DEFAULT_FADE_MS 2000
 #define DEFAULT_LOOP_TIME_OFFSET_SAMPLES 3
+#define DEFAULT_TIMEOUT 10
 
 enum class DefaultSourceModes {silence, white_noise};
 
@@ -219,10 +221,20 @@ class InputStream
         /*return resamplers to normal streaming settings*/
         void end_crossfade();
 
+        /*flush the resampler of any buffered samples, write these to the queue and return the number of samples flushed*/
+        int flush_resampler();
+
+        /*gets an audio frame from the samples queue without decoding any more data from the source
+        * returns true if a frame was returned or false if the queue didn't contain enough samples*/
+        bool empty_queue();
+
+        void resample_queue(const AVSampleFormat& old_sample_format, const AVSampleFormat& new_sample_fmt);
+
         int get_frame_length_milliseconds();
 
         /*sleeps the thread for the correct amount of time to ensure real time operation*/
         void sleep(std::chrono::_V2::steady_clock::time_point &end_time) const;
+
 
         /*METHODS NOT REALLY INTENDED FOR API USERS
         *

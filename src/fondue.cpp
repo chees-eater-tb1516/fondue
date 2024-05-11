@@ -28,6 +28,9 @@ json open_config_file(const std::string& file_path);
 
 void write_config_file(const json& config, const std::string& file_path);
 
+void source_startup_timeout(InputStream& input, FFMPEGString& prompt, const AVCodecContext& output_codec_ctx, 
+                            SourceTimingModes& timing_mode, DefaultSourceModes& source_mode, int timeout_time);
+
 
 int main ()
 {
@@ -38,7 +41,7 @@ int main ()
     avdevice_register_all();
     std::string default_source_name {config["stream settings"]["default source"]};
     FFMPEGString input_prompt{config["sources"][default_source_name]};
-    FFMPEGString output_prompt{config["stream settings"]["output"]};
+    FFMPEGString output_prompt{config["stream settings"]["test output"]};
     
     
     OutputStream sink{output_prompt};
@@ -160,6 +163,7 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             if (config["stream settings"]["active source"] == command)
             {
                 std::cout<<"source currently in use\n";
+                std::cout<<"source not tested\n";
                 goto end;
             }
             if (config["sources"].contains(command))
@@ -168,22 +172,13 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
                 InputStream test_input {};
                 try
                 {
-                    test_input = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
-                    std::cout << "source initialised successfully \n";
-                    try 
-                    {
-                        test_input.get_one_output_frame();
-                        std::cout << "data accessed successfully \n";
-                    }
-                    catch (const char* exception)
-                    {
-                        std::cout << "couldn't access data: " << exception << '\n';
-                    }
+                    source_startup_timeout(test_input, prompt, output_codec_ctx, timing_mode, source_mode, DEFAULT_TIMEOUT);
                 }
-                catch(const char* exception)
+                catch (const char* exception)
                 {
-                    std::cout << "source failed: " << exception << '\n';
-                }                
+                    std::cout << exception <<'\n';
+                }
+                            
             }
             else
             {
@@ -191,7 +186,7 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             }
 
             end:
-                std::cout<<"source not tested\n";
+            ;   
         }
 
         //use-source [source name]
@@ -207,23 +202,21 @@ void control(InputStream &new_source, const AVCodecContext& output_codec_ctx, Co
             if (config["sources"].contains(command))
             {
                 FFMPEGString prompt {config["sources"][command]};
-            
+                InputStream temp_input {};
                 try
                 {
-                    new_source = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
-                    /*decode 5 input frames*/
-                    for (int i = 0; i < 5; i++)
-                        new_source.get_one_output_frame();
+                    source_startup_timeout(temp_input, prompt, output_codec_ctx, timing_mode, source_mode, DEFAULT_TIMEOUT);
+                    new_source = std::move(temp_input);
+                    flags.normal_streaming = false;
+                    std::cout << "source initialised successfully \n";
+                    config["stream settings"]["active source"] = command;
+                    write_config_file(config, PATH_TO_CONFIG_FILE);    
                 }
-                catch(const char* exception)
+                catch (const char* exception)
                 {
-                    std::cout << "source failed: " << exception << '\n';
-                } 
-
-                flags.normal_streaming = false;
-                std::cout << "source initialised successfully \n";
-                config["stream settings"]["active source"] = command;
-                write_config_file(config, PATH_TO_CONFIG_FILE);             
+                    std::cout << exception <<'\n';
+                }
+                 
             }
             else
             {
@@ -264,7 +257,6 @@ void continue_streaming (InputStream& source, InputStream& new_source, OutputStr
     {
         try
         {
-            //new_source.get_one_output_frame();
             source.get_one_output_frame();
             sink.write_frame(source);
             source.sleep(end_time);        
@@ -288,6 +280,21 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
     const int fade_time = DEFAULT_FADE_MS;
     try
     {
+        source.flush_resampler();
+        while (source.empty_queue())
+        {
+            sink.write_frame(source);
+            source.sleep(end_time);
+        }
+    }
+    catch(const char* exception)
+    {
+        std::cout<<exception<<'\n';
+    }
+    
+    try
+    {
+        source.resample_queue(sink.get_output_codec_context().sample_fmt, AV_SAMPLE_FMT_FLTP);
         source.init_crossfade();
         new_source.init_crossfade();
     }
@@ -397,4 +404,52 @@ void write_config_file(const json& config, const std::string& file_path)
 {
     std::ofstream file {file_path};
     file << config.dump(1, '\t');
+}
+
+/*opens the source resource and decodes one frame. Returns true on success or false on failure*/
+bool source_startup(InputStream& input, FFMPEGString& prompt, const AVCodecContext& output_codec_ctx, 
+                            SourceTimingModes& timing_mode, DefaultSourceModes& source_mode)
+{
+    try
+    {
+        input = InputStream{prompt, output_codec_ctx, timing_mode, source_mode};
+        std::cout << "source initialised successfully \n";
+        try 
+        {
+            input.get_one_output_frame();
+            std::cout << "data accessed successfully \n";
+        }
+        catch (const char* exception)
+        {
+            std::cout << "couldn't access data: " << exception << '\n';
+            return false;
+        }
+    }
+    catch(const char* exception)
+    {
+        std::cout << "source failed: " << exception << '\n';
+        return false;
+    }
+
+    return true;
+}
+
+/*tries to open and access the source resource, gives up after timeout_time seconds by throwing a const char* exception*/
+void source_startup_timeout(InputStream& input, FFMPEGString& prompt, const AVCodecContext& output_codec_ctx, 
+                            SourceTimingModes& timing_mode, DefaultSourceModes& source_mode, int timeout_time)
+{
+    std::packaged_task<bool(InputStream&, FFMPEGString&, const AVCodecContext&, SourceTimingModes&, DefaultSourceModes&)> startup (source_startup);
+    auto future = startup.get_future();
+    std::thread thr(std::move(startup), std::ref(input), std::ref(prompt), std::ref(output_codec_ctx), std::ref(timing_mode), std::ref(source_mode));
+    std::chrono::duration<int> timeout {timeout_time};
+    if (future.wait_for(timeout) != std::future_status::timeout)
+    {
+        thr.join();
+        auto value = future.get();
+    } 
+    else
+    {
+        thr.detach();
+        throw "timeout: could not access data from source in a sensible timescale";
+    } 
 }

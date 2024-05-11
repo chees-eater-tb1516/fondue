@@ -628,6 +628,94 @@ AVFrame* InputStream::alloc_frame(AVCodecContext* codec_context)
     return frame;
 }
 
+int InputStream::flush_resampler()
+{
+    m_dst_nb_samples = swr_get_out_samples(m_swr_ctx, m_temp_frame->nb_samples);
+    m_frame -> nb_samples = m_dst_nb_samples;
+
+    av_assert0(m_dst_nb_samples == m_frame->nb_samples);
+    m_ret=av_frame_make_writable(m_frame);
+    m_ret=swr_convert(m_swr_ctx, m_frame->data, m_dst_nb_samples, 
+                        0, 0);
+    
+    if (m_ret < 0)
+    {   
+        return m_ret;
+    }
+    m_actual_nb_samples = m_ret;
+    m_frame->nb_samples=m_ret;
+    av_frame_unref(m_temp_frame);
+
+    if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples)
+        throw "could not write the flushed samples to the fifo";
+
+    return m_ret;
+}
+
+bool InputStream::empty_queue()
+{
+    /*if enough samples are available, copy one frame's worth to m_frame*/
+    if (av_audio_fifo_size(m_queue) >= m_output_frame_size)
+    {
+        m_frame->nb_samples = m_output_frame_size;
+        m_ret=av_frame_make_writable(m_frame);
+
+        /*insert the correct number of samples from the queue into the output frame*/
+        if (av_audio_fifo_read(m_queue, (void **)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples) 
+        {
+            throw "Could not read data from FIFO";
+        }
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void InputStream::resample_queue(const AVSampleFormat& old_sample_fmt, const AVSampleFormat& new_sample_fmt)
+{
+    if (av_audio_fifo_size(m_queue) == 0)
+        return;
+
+    AVFrame* temp_frame = av_frame_alloc();
+    temp_frame->format = m_output_codec_ctx.sample_fmt;
+    av_channel_layout_copy(&temp_frame->ch_layout, &m_output_codec_ctx.ch_layout);
+    temp_frame->sample_rate = m_output_codec_ctx.sample_rate;
+    temp_frame->nb_samples = av_audio_fifo_size(m_queue);
+ 
+    if (temp_frame->nb_samples) {
+        if (av_frame_get_buffer(temp_frame, 0) < 0) 
+        {
+            throw "Input: error allocating an audio buffer";
+        }
+    }
+
+    if (av_audio_fifo_read(m_queue, (void **)temp_frame->data, temp_frame->nb_samples) < temp_frame->nb_samples) 
+    {
+        throw "Could not read data from FIFO";
+    }
+
+    struct SwrContext* temp_swr_ctx = swr_alloc();
+
+    av_opt_set_chlayout(temp_swr_ctx, "in_chlayout", &temp_frame->ch_layout, 0);
+    av_opt_set_chlayout(temp_swr_ctx, "out_chlayout", &temp_frame->ch_layout, 0);
+    av_opt_set_int(temp_swr_ctx, "in_sample_rate", temp_frame->sample_rate, 0);
+    av_opt_set_int(temp_swr_ctx, "out_sample_rate", temp_frame->sample_rate, 0);
+    av_opt_set_sample_fmt(temp_swr_ctx, "in_sample_fmt", old_sample_fmt, 0);
+    av_opt_set_sample_fmt(temp_swr_ctx, "out_sample_fmt", new_sample_fmt, 0);
+
+    swr_init(temp_swr_ctx);
+
+    swr_convert(temp_swr_ctx, temp_frame->data, temp_frame->nb_samples, 
+                        (const uint8_t **)temp_frame->data, temp_frame->nb_samples);
+
+    if (av_audio_fifo_write(m_queue, (void**)temp_frame->data, temp_frame->nb_samples) < temp_frame->nb_samples)
+        throw "could not write the resampled samples to the fifo";
+
+    av_frame_free(&temp_frame);
+    swr_free(&temp_swr_ctx);
+}
 
 void InputStream::init_crossfade()
 {
