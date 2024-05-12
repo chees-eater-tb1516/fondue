@@ -228,6 +228,9 @@ class InputStream
         * returns true if a frame was returned or false if the queue didn't contain enough samples*/
         bool empty_queue();
 
+        /*clears all samples from the samples queue*/
+        void clear_queue();
+
         void resample_queue(const AVSampleFormat& old_sample_format, const AVSampleFormat& new_sample_fmt);
 
         int get_frame_length_milliseconds();

@@ -644,7 +644,6 @@ int InputStream::flush_resampler()
     }
     m_actual_nb_samples = m_ret;
     m_frame->nb_samples=m_ret;
-    av_frame_unref(m_temp_frame);
 
     if (av_audio_fifo_write(m_queue, (void**)m_frame->data, m_frame->nb_samples) < m_frame->nb_samples)
         throw "could not write the flushed samples to the fifo";
@@ -673,10 +672,18 @@ bool InputStream::empty_queue()
     }
 }
 
+void InputStream::clear_queue()
+{
+    av_audio_fifo_reset(m_queue);
+}
+
 void InputStream::resample_queue(const AVSampleFormat& old_sample_fmt, const AVSampleFormat& new_sample_fmt)
 {
     if (av_audio_fifo_size(m_queue) == 0)
+    {
+        clear_queue();
         return;
+    }
 
     AVFrame* temp_frame = av_frame_alloc();
     temp_frame->format = m_output_codec_ctx.sample_fmt;
@@ -710,6 +717,15 @@ void InputStream::resample_queue(const AVSampleFormat& old_sample_fmt, const AVS
     swr_convert(temp_swr_ctx, temp_frame->data, temp_frame->nb_samples, 
                         (const uint8_t **)temp_frame->data, temp_frame->nb_samples);
 
+    int channels {};
+    if (new_sample_fmt == AV_SAMPLE_FMT_FLTP)
+        channels = 2;
+    else
+        channels = m_output_codec_ctx.ch_layout.nb_channels;
+
+    av_audio_fifo_free(m_queue);
+    m_queue = av_audio_fifo_alloc(new_sample_fmt, channels, temp_frame->nb_samples);
+
     if (av_audio_fifo_write(m_queue, (void**)temp_frame->data, temp_frame->nb_samples) < temp_frame->nb_samples)
         throw "could not write the resampled samples to the fifo";
 
@@ -728,14 +744,26 @@ void InputStream::init_crossfade()
     {
         throw "crossfading: failed to initialise the resampler context";
     }
+    if (av_audio_fifo_size(m_queue) == 0)
+    {
+        int channels = 2;
+        av_audio_fifo_free(m_queue);
+        m_queue = av_audio_fifo_alloc(AV_SAMPLE_FMT_FLTP, channels, 1);
+    }
 }
-
 void InputStream::end_crossfade()
 {
     set_resampler_options(m_swr_ctx, &m_output_codec_ctx);
     if ((swr_init(m_swr_ctx)) < 0) 
     {
         throw "end crossfading: failed to initialise the resampler context";
+    }
+    if (av_audio_fifo_size(m_queue) == 0)
+    {
+        int channels = m_output_codec_ctx.ch_layout.nb_channels;
+        AVSampleFormat fmt = m_output_codec_ctx.sample_fmt;
+        av_audio_fifo_free(m_queue);
+        m_queue = av_audio_fifo_alloc(fmt, channels, 1);
     }
 }
 
@@ -862,7 +890,7 @@ void InputStream::deepcopy_audio_fifo(AVAudioFifo* src)
     av_audio_fifo_peek(src, (void**)temp_frame->data, queue_length);
     int x {av_audio_fifo_realloc(m_queue, queue_length)};
     x = av_audio_fifo_write(m_queue, (void**)temp_frame->data, queue_length);
-
+    av_frame_free(&temp_frame);
 }
 
 void InputStream::deepcopy_frame(AVFrame* &dst, AVFrame* src)

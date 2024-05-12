@@ -41,7 +41,7 @@ int main ()
     avdevice_register_all();
     std::string default_source_name {config["stream settings"]["default source"]};
     FFMPEGString input_prompt{config["sources"][default_source_name]};
-    FFMPEGString output_prompt{config["stream settings"]["test output"]};
+    FFMPEGString output_prompt{config["stream settings"]["output"]};
     
     
     OutputStream sink{output_prompt};
@@ -286,6 +286,7 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
             sink.write_frame(source);
             source.sleep(end_time);
         }
+        new_source.clear_queue();
     }
     catch(const char* exception)
     {
@@ -318,6 +319,7 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
         catch(const char* exception)
         {
             std::cout<<"new source: "<<exception<<": crossfading failed \n";
+            source.clear_queue();
             source.end_crossfade();
             return std::move(source);
         }
@@ -339,6 +341,9 @@ InputStream&& crossfade (InputStream& source, InputStream& new_source,
         sink.write_frame(source);
         source.sleep(end_time);
     }
+
+    new_source.flush_resampler();
+    new_source.resample_queue(AV_SAMPLE_FMT_FLTP, sink.get_output_codec_context().sample_fmt);
     new_source.end_crossfade();
     return std::move(new_source);
 }
